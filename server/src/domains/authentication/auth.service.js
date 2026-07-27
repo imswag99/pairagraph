@@ -172,7 +172,9 @@ export async function requestPasswordReset(email) {
   if (!user) return;
 
   if (user.authProvider === 'google' && !user.passwordHash) {
-    await mailer.sendGoogleAccountNoticeEmail(user.email);
+    mailer.sendGoogleAccountNoticeEmail(user.email).catch((err) => {
+      console.error('Failed to send Google-account notice email:', err);
+    });
     return;
   }
 
@@ -181,7 +183,9 @@ export async function requestPasswordReset(email) {
   user.passwordResetExpires = new Date(Date.now() + PASSWORD_RESET_TTL_MS);
   await user.save();
 
-  await mailer.sendPasswordResetEmail(user.email, rawToken);
+  mailer.sendPasswordResetEmail(user.email, rawToken).catch((err) => {
+    console.error('Failed to send password reset email:', err);
+  });
 }
 
 export async function resetPassword(rawToken, newPassword) {
