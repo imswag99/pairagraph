@@ -35,6 +35,11 @@ const authLimiter = rateLimit({
 export function createApp() {
   const app = express();
 
+  // Render (like Heroku) puts exactly one reverse proxy in front of the app;
+  // trusting that one hop lets express-rate-limit read the real client IP
+  // from X-Forwarded-For instead of rate-limiting the proxy itself.
+  app.set('trust proxy', 1);
+
   app.use(cors({ origin: process.env.CLIENT_URL, credentials: true }));
   app.use(express.json());
   app.use(cookieParser());

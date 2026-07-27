@@ -18,7 +18,7 @@ Pairagraph is a turn-based collaborative writing app: two people are paired up (
 
 ## Tech stack
 
-**Backend:** Node.js, Express, MongoDB (Atlas) via Mongoose, Socket.IO, JWT auth, Google Gemini, Nodemailer, Google OAuth.
+**Backend:** Node.js, Express, MongoDB (Atlas) via Mongoose, Socket.IO, JWT auth, Google Gemini, SendGrid, Google OAuth.
 **Frontend:** React 18, Vite, React Router, Tailwind CSS, Tiptap (rich text), Framer Motion, Socket.IO client.
 
 See [`docs/BACKEND.md`](docs/BACKEND.md) and [`docs/FRONTEND.md`](docs/FRONTEND.md) for the full architecture, design decisions, and a running log of bugs found along the way. See [`docs/KNOWN_ISSUES.md`](docs/KNOWN_ISSUES.md) for a prioritized list of what's deliberately left unfinished.
@@ -55,7 +55,7 @@ cp server/.env.example server/.env
 cp client/.env.example client/.env
 ```
 
-`server/.env` needs a MongoDB URI, JWT secrets, SMTP credentials (for verification/reset emails), a Google OAuth client ID, and optionally a Gemini API key (falls back to a local keyword pool if omitted). `client/.env` needs the API URL and the same Google OAuth client ID.
+`server/.env` needs a MongoDB URI, JWT secrets, a SendGrid API key + verified sender address (for verification/reset emails), a Google OAuth client ID, and optionally a Gemini API key (falls back to a local keyword pool if omitted). `client/.env` needs the API URL and the same Google OAuth client ID.
 
 ### 3. Run both dev servers
 

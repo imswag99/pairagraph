@@ -6,7 +6,7 @@ Turn-based, two-person collaborative writing app. This document covers the backe
 
 ## 1. Architecture at a glance
 
-**Stack:** Node.js, Express, MongoDB (Atlas) via Mongoose, Socket.IO, JWT auth, Google Gemini (AI keywords), Nodemailer (email), Google OAuth (`google-auth-library`), `express-rate-limit`.
+**Stack:** Node.js, Express, MongoDB (Atlas) via Mongoose, Socket.IO, JWT auth, Google Gemini (AI keywords), SendGrid (email, via its HTTP API), Google OAuth (`google-auth-library`), `express-rate-limit`.
 
 **Pattern:** Layered, domain-driven. Each feature area lives under `server/src/domains/<name>/` with the same four files:
 
@@ -189,6 +189,8 @@ Every domain that needs to push a real-time notification (matchmaking, invite, c
 | 11 | Real Gemini calls turned out to be silently exhausted (429) for most of a session's testing | Free-tier daily quota (20/day) had already been burned through by dev testing; every call was quietly falling back to the local pool, which read as "keywords feel repetitive" rather than "AI isn't running at all" | Not a code fix — root-caused via direct logging against the live API, documented as a known ceiling (§6) |
 | 12 | New `PointsEntry` rows were leaking on every full test-suite run | `collaboration.service.test.js` predates the leaderboard feature; its "both approve → completed" test now triggers real point-awarding as a side effect of `respondToCompletion`, but that test file's cleanup was written before `PointsEntry` existed and never accounted for it | Added `PointsEntry` cleanup to that test file's `after()` hook; verified zero leftover rows across repeated full-suite runs |
 | 13 | CI failed at `npm ci` with `EUSAGE`, "package-lock.json in sync" error, on a repo that installed fine locally | `package-lock.json` was missing several nested transitive dependencies (`mongoose` carries its own optional `gcp-metadata@5.3.0`, distinct from `google-auth-library`'s `gcp-metadata@6.1.1`) — apparently omitted due to an npm-version-specific quirk when the lockfile was originally generated; `npm ci` validates strictly, `npm install` doesn't, and the locally-installed npm version didn't flag it as inconsistent either | Regenerated `package-lock.json` from a clean `node_modules`, verified `npm ci` succeeds and the full suite still passes, before committing the fix |
+| 14 | Forgot-password stuck on "Sending…" forever in production | `requestPasswordReset` awaited the actual SMTP send before the HTTP response returned; once deployed, the SMTP connection (first Gmail, then a second provider) hung with `ETIMEDOUT` on `CONN` — very likely Render blocking outbound SMTP ports (25/465/587) entirely, not a credential/config issue, since two completely different SMTP hosts failed identically | Stopped awaiting the mail send in the request path (fires in the background, errors logged server-side instead of blocking the response); added explicit nodemailer timeouts as a stopgap; ultimately replaced SMTP entirely with SendGrid's HTTP API (`@sendgrid/mail`, port 443) since that's not subject to the same port-blocking risk — see §2 and the CVE note in §15 |
+| 15 | `express-rate-limit` threw `ERR_ERL_UNEXPECTED_X_FORWARDED_FOR` in production logs | Render sits behind a reverse proxy that sets `X-Forwarded-For`; Express's `trust proxy` setting defaults to `false`, so the rate limiter couldn't safely resolve the real client IP | `app.set('trust proxy', 1)` in `app.js` — trusts exactly the one proxy hop Render adds, matching the same fix Heroku deployments need |
 
 ## 14. Operational incidents (not code bugs, but shaped a lot of this build)
 
@@ -197,8 +199,9 @@ Every domain that needs to push a real-time notification (matchmaking, invite, c
 
 ## 15. Known limitations (deliberately deferred, not overlooked)
 
-- **Four open dependency CVEs**, each requiring a breaking upgrade: `nodemailer` (high severity, needs v6→v9), `react-router`/`react-router-dom` (moderate, no fix exists in the 6.x line — needs a v6→v7 migration), Vite/esbuild (moderate-high, dev-server only, needs v5→v8), and a transitive `uuid`/`gaxios` issue pulled in via `google-auth-library` (fixing it means bumping that library, risking the Google Sign-In flow). All four were investigated and consciously deferred as separate migration tasks rather than bundled into unrelated work.
+- **Three open dependency CVEs** (down from four — removing `nodemailer` in favor of SendGrid's HTTP API cleared its high-severity CVE as a side effect, not a dedicated fix), each requiring a breaking upgrade: `react-router`/`react-router-dom` (moderate, no fix exists in the 6.x line — needs a v6→v7 migration), Vite/esbuild (moderate-high, dev-server only, needs v5→v8), and a transitive `uuid`/`gaxios` issue pulled in via `google-auth-library` (fixing it means bumping that library, risking the Google Sign-In flow). All three were investigated and consciously deferred as separate migration tasks rather than bundled into unrelated work.
 - **Gemini's 20/day free-tier ceiling** (§6) — a product/cost decision, not a bug.
 - **Rate limiting and Socket.IO are single-instance only** (§9, §10) — fine for the current deployment, real gaps the moment this runs on more than one process.
 - **No frontend test coverage** — see `docs/FRONTEND.md`.
-- No structured logging (raw `console.log`/`console.error` in a handful of places), no error-tracking/monitoring service, and email is sent via raw SMTP credentials rather than a transactional email provider.
+- No structured logging (raw `console.log`/`console.error` in a handful of places), no error-tracking/monitoring service.
+- **Email deliverability risk:** `EMAIL_FROM` is a free Gmail address rather than a verified custom domain, since the project has no domain to verify. SendGrid explicitly warns this can hurt deliverability (some strict recipient servers may flag it as spoofed) — reset/verification emails landing in spam is a real possibility, not just a theoretical one.

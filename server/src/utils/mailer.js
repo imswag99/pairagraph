@@ -1,30 +1,24 @@
-import nodemailer from 'nodemailer';
+import sgMail from '@sendgrid/mail';
 
-let transporter;
+sgMail.setApiKey(process.env.SENDGRID_API_KEY);
 
-function getTransporter() {
-  if (!transporter) {
-    transporter = nodemailer.createTransport({
-      host: process.env.SMTP_HOST,
-      port: Number(process.env.SMTP_PORT),
-      secure: Number(process.env.SMTP_PORT) === 465,
-      auth: {
-        user: process.env.SMTP_USER,
-        pass: process.env.SMTP_PASS,
-      },
-      connectionTimeout: 10_000,
-      greetingTimeout: 10_000,
-      socketTimeout: 10_000,
-    });
+// EMAIL_FROM is stored as "Display Name <email@domain>"; SendGrid's helper
+// expects { name, email } rather than parsing that string itself.
+function parseFromAddress(raw) {
+  const match = raw?.match(/^(.*?)\s*<(.+)>$/);
+  if (match) {
+    return { name: match[1].replace(/^"|"$/g, ''), email: match[2] };
   }
-  return transporter;
+  return { email: raw };
 }
+
+const from = parseFromAddress(process.env.EMAIL_FROM);
 
 async function sendVerificationEmail(email, rawToken) {
   const verifyUrl = `${process.env.CLIENT_URL}/verify-email/${rawToken}`;
 
-  await getTransporter().sendMail({
-    from: process.env.EMAIL_FROM,
+  await sgMail.send({
+    from,
     to: email,
     subject: 'Verify your Pairagraph email',
     html: `<p>Confirm your email to start writing on Pairagraph.</p>
@@ -35,8 +29,8 @@ async function sendVerificationEmail(email, rawToken) {
 async function sendPasswordResetEmail(email, rawToken) {
   const resetUrl = `${process.env.CLIENT_URL}/reset-password/${rawToken}`;
 
-  await getTransporter().sendMail({
-    from: process.env.EMAIL_FROM,
+  await sgMail.send({
+    from,
     to: email,
     subject: 'Reset your Pairagraph password',
     html: `<p>Someone requested a password reset for this account. If that was you, choose a new password here:</p>
@@ -46,8 +40,8 @@ async function sendPasswordResetEmail(email, rawToken) {
 }
 
 async function sendGoogleAccountNoticeEmail(email) {
-  await getTransporter().sendMail({
-    from: process.env.EMAIL_FROM,
+  await sgMail.send({
+    from,
     to: email,
     subject: 'Password reset requested for your Pairagraph account',
     html: `<p>Someone requested a password reset for this account, but it's set up to sign in with Google.</p>
@@ -56,7 +50,7 @@ async function sendGoogleAccountNoticeEmail(email) {
 }
 
 // Exported as a single mutable object (rather than named exports) so tests can
-// swap individual methods with node:test's mock.method without hitting real SMTP.
+// swap individual methods with node:test's mock.method without hitting the real API.
 export const mailer = {
   sendVerificationEmail,
   sendPasswordResetEmail,
