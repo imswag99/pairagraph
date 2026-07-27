@@ -25,7 +25,9 @@ export function ForgotPasswordModal({ isOpen, onClose }) {
     setIsSubmitting(true);
     try {
       await forgotPassword(email);
-      setMessage('If an account exists for that email, a reset link is on its way.');
+      setMessage(
+        "If an account exists for that email, a reset link is on its way. Don't see it? Check your spam folder."
+      );
     } catch (err) {
       setError(err.message);
     } finally {

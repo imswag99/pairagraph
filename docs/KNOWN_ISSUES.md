@@ -41,7 +41,7 @@ Last reviewed: 2026-07-28, after fixing the forgot-password/email pipeline post-
 ## Product / cost decisions (not bugs)
 
 16. **Gemini's 20/day free-tier ceiling** for AI-generated keywords — a deliberate cost decision, not a limitation to fix. Falls back to a local keyword pool once exhausted.
-17. **`EMAIL_FROM` is a free Gmail address, not a verified custom domain** — SendGrid explicitly warns this can hurt deliverability. Reset/verification emails landing in spam is a real possibility, not just theoretical. Fixing it properly means buying a domain, which isn't free — for now, worth telling users to check spam if they report a missing email.
+17. **`EMAIL_FROM` is a free Gmail address, not a verified custom domain** — confirmed in production testing: SendGrid reports 100% delivery, but the email lands in Gmail's Spam folder rather than the inbox (Gmail treats mail claiming to be `@gmail.com` but not sent through Google's own servers as suspicious, especially Gmail-to-Gmail). Fixing it properly means buying a domain, which isn't free — for now, the UI/support messaging should tell users to check spam if a reset/verification email seems missing.
 
 ---
 

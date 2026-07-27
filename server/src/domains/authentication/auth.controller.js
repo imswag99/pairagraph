@@ -47,7 +47,7 @@ export const registerHandler = asyncHandler(async (req, res) => {
   const user = await authService.register({ email, password, displayName: displayName.trim() });
   res.status(201).json({
     success: true,
-    message: 'Account created. Check your email to verify your address.',
+    message: "Account created. Check your email to verify your address (don't see it? check spam).",
     data: { user },
   });
 });
