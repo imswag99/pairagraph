@@ -6,10 +6,16 @@ import * as authService from './auth.service.js';
 const ACCESS_TOKEN_MAX_AGE_MS = 15 * 60 * 1000; // matches JWT_ACCESS_EXPIRES default (15m)
 const REFRESH_TOKEN_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000; // matches JWT_REFRESH_EXPIRES default (7d)
 
+// In dev, frontend (localhost:5173) and API (localhost:5000) are different
+// ports but the same site, so 'lax' + no Secure flag works over plain http.
+// In production they're different domains entirely (vercel.app / onrender.com)
+// — that's genuinely cross-site, so the cookie needs SameSite=None, which
+// browsers only honor when Secure is also set (i.e. real HTTPS).
+const isProduction = process.env.NODE_ENV === 'production';
 const cookieOptions = {
   httpOnly: true,
-  secure: process.env.NODE_ENV === 'production',
-  sameSite: 'lax',
+  secure: isProduction,
+  sameSite: isProduction ? 'none' : 'lax',
   path: '/',
 };
 
