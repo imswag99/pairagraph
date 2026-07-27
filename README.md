@@ -21,7 +21,7 @@ Pairagraph is a turn-based collaborative writing app: two people are paired up (
 **Backend:** Node.js, Express, MongoDB (Atlas) via Mongoose, Socket.IO, JWT auth, Google Gemini, Nodemailer, Google OAuth.
 **Frontend:** React 18, Vite, React Router, Tailwind CSS, Tiptap (rich text), Framer Motion, Socket.IO client.
 
-See [`docs/BACKEND.md`](docs/BACKEND.md) and [`docs/FRONTEND.md`](docs/FRONTEND.md) for the full architecture, design decisions, and a running log of bugs found along the way.
+See [`docs/BACKEND.md`](docs/BACKEND.md) and [`docs/FRONTEND.md`](docs/FRONTEND.md) for the full architecture, design decisions, and a running log of bugs found along the way. See [`docs/KNOWN_ISSUES.md`](docs/KNOWN_ISSUES.md) for a prioritized list of what's deliberately left unfinished.
 
 ## Project structure
 
