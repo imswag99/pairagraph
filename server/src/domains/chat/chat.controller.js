@@ -8,6 +8,10 @@ export const sendMessageHandler = asyncHandler(async (req, res) => {
 });
 
 export const getHistoryHandler = asyncHandler(async (req, res) => {
-  const messages = await chatService.getHistory(req.user.id, req.params.collaborationId);
-  res.json({ success: true, data: { messages } });
+  const { before, limit } = req.query;
+  const result = await chatService.getHistory(req.user.id, req.params.collaborationId, {
+    before,
+    limit: limit ? Number(limit) : undefined,
+  });
+  res.json({ success: true, data: result });
 });

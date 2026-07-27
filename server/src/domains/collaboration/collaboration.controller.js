@@ -3,8 +3,18 @@ import { ApiError } from '../../utils/ApiError.js';
 import * as collaborationService from './collaboration.service.js';
 
 export const listMineHandler = asyncHandler(async (req, res) => {
-  const collaborations = await collaborationService.getMine(req.user.id);
-  res.json({ success: true, data: { collaborations } });
+  const { status, page, limit } = req.query;
+  const result = await collaborationService.getMine(req.user.id, {
+    status,
+    page: page ? Number(page) : undefined,
+    limit: limit ? Number(limit) : undefined,
+  });
+  res.json({ success: true, data: result });
+});
+
+export const getTurnCountHandler = asyncHandler(async (req, res) => {
+  const count = await collaborationService.getTurnCount(req.user.id);
+  res.json({ success: true, data: { count } });
 });
 
 export const getOneHandler = asyncHandler(async (req, res) => {

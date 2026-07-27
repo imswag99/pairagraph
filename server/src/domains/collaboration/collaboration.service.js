@@ -51,21 +51,45 @@ async function findAccessible(userId, collaborationId) {
   return collaboration;
 }
 
-export async function getMine(userId) {
-  const collaborations = await Collaboration.find({ 'participants.user': userId })
-    .sort({ updatedAt: -1 })
-    .populate(PARTICIPANT_POPULATE)
-    .populate(TURN_OWNER_POPULATE);
+export async function getMine(userId, { status, page = 1, limit = 10 } = {}) {
+  const query = { 'participants.user': userId };
+  if (status) {
+    query.status = { $in: Array.isArray(status) ? status : status.split(',') };
+  }
 
-  return collaborations.map((c) => ({
-    id: c._id,
-    writingType: c.writingType,
-    status: c.status,
-    turnOwner: c.turnOwner,
-    participants: c.participants,
-    entryCount: c.entries.length,
-    updatedAt: c.updatedAt,
-  }));
+  const skip = (page - 1) * limit;
+
+  const [collaborations, total] = await Promise.all([
+    Collaboration.find(query)
+      .sort({ updatedAt: -1 })
+      .skip(skip)
+      .limit(limit)
+      .populate(PARTICIPANT_POPULATE)
+      .populate(TURN_OWNER_POPULATE),
+    Collaboration.countDocuments(query),
+  ]);
+
+  return {
+    collaborations: collaborations.map((c) => ({
+      id: c._id,
+      writingType: c.writingType,
+      status: c.status,
+      turnOwner: c.turnOwner,
+      participants: c.participants,
+      entryCount: c.entries.length,
+      updatedAt: c.updatedAt,
+    })),
+    hasMore: skip + collaborations.length < total,
+    total,
+  };
+}
+
+export async function getTurnCount(userId) {
+  return Collaboration.countDocuments({
+    'participants.user': userId,
+    status: 'in_progress',
+    turnOwner: userId,
+  });
 }
 
 export async function getById(userId, collaborationId) {

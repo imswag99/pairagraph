@@ -36,10 +36,23 @@ export async function sendMessage(userId, collaborationId, content) {
   return message;
 }
 
-export async function getHistory(userId, collaborationId) {
+export async function getHistory(userId, collaborationId, { before, limit = 30 } = {}) {
   await requireParticipant(userId, collaborationId);
 
-  return ChatMessage.find({ collaboration: collaborationId })
-    .sort({ createdAt: 1 })
+  const query = { collaboration: collaborationId };
+  if (before) {
+    query.createdAt = { $lt: new Date(before) };
+  }
+
+  // Fetched newest-first so `limit` caps at the most recent page regardless of
+  // how much history exists, then reversed back to chronological for display.
+  const messages = await ChatMessage.find(query)
+    .sort({ createdAt: -1 })
+    .limit(limit)
     .populate('sender', 'displayName');
+
+  return {
+    messages: messages.reverse(),
+    hasMore: messages.length === limit,
+  };
 }

@@ -59,7 +59,9 @@ Domains: **authentication, collaboration, matchmaking, invite, ai, chat, leaderb
 - A single rejection (`approve:false`) immediately sets `status:'private'`; two `true` approvals set `status:'completed'`, which also triggers the leaderboard's `awardCompletionPoints` (§8) exactly once, guarded by the same "no longer in progress" check that blocks any further completion responses on that collaboration.
 - One-line-per-turn (poem) / one-paragraph-per-turn (story) is enforced server-side by counting `<p>` tags and rejecting any `<br>` in poem content — defense-in-depth against a client that bypasses the editor's own restriction (see the editor's Enter-key blocking, front-end side).
 
-**Endpoints:** `GET /collaborations` (list mine, summarized), `GET /collaborations/:id` (full detail, populated), `POST /collaborations/:id/turns`, `POST /collaborations/:id/completion`.
+**Endpoints:** `GET /collaborations` (list mine, summarized, paginated + filterable), `GET /collaborations/turn-count` (count of `in_progress` collaborations where it's this user's turn — a dedicated lightweight endpoint for the nav badge, cheaper than fetching full collaboration data just to derive a number), `GET /collaborations/:id` (full detail, populated), `POST /collaborations/:id/turns`, `POST /collaborations/:id/completion`.
+
+**Pagination:** `GET /collaborations?status=<comma-separated>&page=&limit=` — `status` filters (e.g. `in_progress`, or `completed,private` for "past"), defaults to `page=1&limit=10`. Returns `{collaborations, hasMore, total}` rather than a bare array; `hasMore` is computed from an actual `countDocuments`, not a "did we get a full page" heuristic, since the query is cheap enough to just count.
 
 **Real-time:** both `submitTurn` and `respondToCompletion` broadcast `collaboration:updated` (the full populated document) to both participants' socket rooms after saving, so neither side needs to refresh to see the other's move.
 
@@ -107,6 +109,8 @@ Domains: **authentication, collaboration, matchmaking, invite, ai, chat, leaderb
 
 **Endpoints:** `GET/POST /collaborations/:collaborationId/chat`. Sending broadcasts `chat:message` to both participants' socket rooms (not just "the other one" — covers the sender's other open tabs too).
 
+**Pagination:** `GET .../chat?limit=&before=` — cursor-based on `createdAt`, fetched newest-first server-side and reversed back to chronological order before returning. `hasMore` is a "did we get a full page" heuristic (`messages.length === limit`) rather than a separate count query — cheap, with a known edge case (a false positive if exactly `limit` messages remain with nothing older), which just costs one harmless extra "Load earlier" click that returns an empty page.
+
 **Typing indicator:** purely a Socket.IO relay (`chat:typing`) — client emits, server looks up the collaboration to find "the other participant" and relays to them. No REST endpoint, no persistence. The frontend hides the indicator if no new ping arrives within ~2.5s, since the server only ever relays "typing right now," never "stopped."
 
 ---
@@ -153,12 +157,22 @@ Every domain that needs to push a real-time notification (matchmaking, invite, c
 
 - **Mailer mocking:** `utils/mailer.js` exports a single mutable object (`{ sendVerificationEmail, sendPasswordResetEmail, sendGoogleAccountNoticeEmail }`) rather than named exports, specifically so `node:test`'s `mock.method()` can swap individual methods in auth tests — ES module named-export bindings are frozen and can't be mocked this way, a plain object's properties can.
 - **Socket-dependent services:** `testUtils/testSocket.js` spins up a throwaway HTTP server + `initIO()` so services that call `getIO()` (matchmaking, invite, collaboration) don't throw in tests — nothing needs to actually connect, `io.to(room).emit(...)` is a safe no-op with zero listening sockets.
-- **Coverage:** auth (register/login/verify/reset/change-password/delete), collaboration (turn ownership, one-line/one-paragraph enforcement, completion approve/reject), invites (create/redeem/cancel/self-redeem-block), matchmaking (pairing logic), leaderboard (idempotency, ranking, week-boundary exclusion, deleted-account exclusion). 43 tests total, all passing.
+- **Coverage:** auth (register/login/verify/reset/change-password/delete), collaboration (turn ownership, one-line/one-paragraph enforcement, completion approve/reject, pagination + status filtering, turn-count), invites (create/redeem/cancel/self-redeem-block), matchmaking (pairing logic), leaderboard (idempotency, ranking, week-boundary exclusion, deleted-account exclusion). 44 tests total, all passing.
 - **What's deliberately not covered:** raw Socket.IO event delivery over the wire (verified manually/via live scripts during development instead — a full socket-server integration harness was judged not worth the added complexity for the confidence gained), and there is currently no frontend test coverage at all (no Vitest/RTL/Playwright) — everything on the client has been verified by manual reasoning and live curl/socket scripts.
 
 ---
 
-## 12. Bugs found and fixed
+## 12. CI/CD
+
+`.github/workflows/server-tests.yml` runs the backend test suite (§11) on every push and pull request, on any branch: checkout → `actions/setup-node@v4` (Node 22) → `npm ci` (server/) → `npm test`.
+
+- **Secrets required:** `MONGODB_URI`, `JWT_ACCESS_SECRET`, `JWT_REFRESH_SECRET` (repo Settings → Secrets and variables → Actions). Tests hit the same real Atlas dev database as local development — consistent with this project's practice of testing against real infrastructure, though it does mean CI and local dev share state.
+- **`GEMINI_API_KEY` is deliberately left unset in CI** — with no key, `generateKeywords()` falls straight through to the local fallback pool (§6), so running the suite never spends any of the 20-requests/day Gemini quota.
+- **No frontend job yet** — there's no frontend test suite to run (§ see `docs/FRONTEND.md`), so the workflow only covers `server/`.
+
+---
+
+## 13. Bugs found and fixed
 
 | # | Bug | Root cause | Fix |
 |---|---|---|---|
@@ -174,16 +188,17 @@ Every domain that needs to push a real-time notification (matchmaking, invite, c
 | 10 | Gemini kept returning near-identical keyword sets across unrelated collaborations | Generic prompt, no temperature set — the model converged on the same "safe" evocative words every time | Explicit `temperature`/`topP`/`topK`, a randomized prompt "angle" per call, and naming repeat offenders to avoid |
 | 11 | Real Gemini calls turned out to be silently exhausted (429) for most of a session's testing | Free-tier daily quota (20/day) had already been burned through by dev testing; every call was quietly falling back to the local pool, which read as "keywords feel repetitive" rather than "AI isn't running at all" | Not a code fix — root-caused via direct logging against the live API, documented as a known ceiling (§6) |
 | 12 | New `PointsEntry` rows were leaking on every full test-suite run | `collaboration.service.test.js` predates the leaderboard feature; its "both approve → completed" test now triggers real point-awarding as a side effect of `respondToCompletion`, but that test file's cleanup was written before `PointsEntry` existed and never accounted for it | Added `PointsEntry` cleanup to that test file's `after()` hook; verified zero leftover rows across repeated full-suite runs |
+| 13 | CI failed at `npm ci` with `EUSAGE`, "package-lock.json in sync" error, on a repo that installed fine locally | `package-lock.json` was missing several nested transitive dependencies (`mongoose` carries its own optional `gcp-metadata@5.3.0`, distinct from `google-auth-library`'s `gcp-metadata@6.1.1`) — apparently omitted due to an npm-version-specific quirk when the lockfile was originally generated; `npm ci` validates strictly, `npm install` doesn't, and the locally-installed npm version didn't flag it as inconsistent either | Regenerated `package-lock.json` from a clean `node_modules`, verified `npm ci` succeeds and the full suite still passes, before committing the fix |
 
-## 13. Operational incidents (not code bugs, but shaped a lot of this build)
+## 14. Operational incidents (not code bugs, but shaped a lot of this build)
 
 - **MongoDB Atlas connectivity outage:** login and turn-submission both 500'd with a raw TLS/`ReplicaSetNoPrimary` error from Mongoose. Root cause was Atlas's Network Access list no longer matching the current public IP (common with dynamic ISP addresses) — fixed by widening it to `0.0.0.0/0`. Not a code issue; confirmed by testing the exact same request before/after the allow-list change.
 - **Orphaned dev-server processes:** every manual restart this session killed only the process holding port 5000, never the `npm run dev` → `nodemon` parent chain that spawned it. Over many restarts this left **16 orphaned nodemon instances** silently running, all watching the same files and racing each other to rebind the port after any edit — whichever won a given restart could be serving stale code from hours earlier. Fixed by identifying and killing every `nodemon.js .../server.js` and `npm-cli.js run dev` process by exact command line before any subsequent restart.
 
-## 14. Known limitations (deliberately deferred, not overlooked)
+## 15. Known limitations (deliberately deferred, not overlooked)
 
 - **Four open dependency CVEs**, each requiring a breaking upgrade: `nodemailer` (high severity, needs v6→v9), `react-router`/`react-router-dom` (moderate, no fix exists in the 6.x line — needs a v6→v7 migration), Vite/esbuild (moderate-high, dev-server only, needs v5→v8), and a transitive `uuid`/`gaxios` issue pulled in via `google-auth-library` (fixing it means bumping that library, risking the Google Sign-In flow). All four were investigated and consciously deferred as separate migration tasks rather than bundled into unrelated work.
 - **Gemini's 20/day free-tier ceiling** (§6) — a product/cost decision, not a bug.
 - **Rate limiting and Socket.IO are single-instance only** (§9, §10) — fine for the current deployment, real gaps the moment this runs on more than one process.
-- **No frontend test coverage** (§11) and **no CI pipeline** wiring the backend suite into every push — both on the list to close.
-- No structured logging (raw `console.log`/`console.error` in a handful of places), no error-tracking/monitoring service, no pagination on collaboration/chat history lists, and email is sent via raw SMTP credentials rather than a transactional email provider.
+- **No frontend test coverage** — see `docs/FRONTEND.md`.
+- No structured logging (raw `console.log`/`console.error` in a handful of places), no error-tracking/monitoring service, and email is sent via raw SMTP credentials rather than a transactional email provider.

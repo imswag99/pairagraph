@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { chatService } from '../../services/chatService.js';
 import { socket } from '../../sockets/socket.js';
+import { ChatMessageSkeleton } from '../Skeleton.jsx';
 
 const TYPING_HIDE_AFTER = 2500;
 const TYPING_EMIT_INTERVAL = 1200;
@@ -30,18 +31,50 @@ function formatDateDivider(dateString) {
 export function ChatPanel({ collaborationId, currentUserId }) {
   const [isOpen, setIsOpen] = useState(false);
   const [messages, setMessages] = useState(null);
+  const [hasMore, setHasMore] = useState(false);
+  const [isLoadingOlder, setIsLoadingOlder] = useState(false);
   const [draft, setDraft] = useState('');
   const [isSending, setIsSending] = useState(false);
   const [isOtherTyping, setIsOtherTyping] = useState(false);
   const listRef = useRef(null);
   const typingHideTimer = useRef(null);
   const lastTypingEmitAt = useRef(0);
+  const isPrependingRef = useRef(false);
 
   // Always fetched on mount: on desktop the panel is a persistent sidebar,
   // so there's no "open" action to gate the fetch behind.
   useEffect(() => {
-    chatService.getHistory(collaborationId).then(({ data }) => setMessages(data.messages));
+    chatService.getHistory(collaborationId).then(({ data }) => {
+      setMessages(data.messages);
+      setHasMore(data.hasMore);
+    });
   }, [collaborationId]);
+
+  async function handleLoadEarlier() {
+    if (!messages || messages.length === 0) return;
+    setIsLoadingOlder(true);
+    const container = listRef.current;
+    const prevScrollHeight = container?.scrollHeight ?? 0;
+    const prevScrollTop = container?.scrollTop ?? 0;
+    try {
+      const { data } = await chatService.getHistory(collaborationId, {
+        before: messages[0].createdAt,
+      });
+      isPrependingRef.current = true;
+      setMessages((prev) => [...data.messages, ...prev]);
+      setHasMore(data.hasMore);
+      // Loading older messages shouldn't jerk the view to the bottom (that's
+      // only right for new/initial messages) — restore the same content the
+      // user was looking at instead of resetting scroll position.
+      requestAnimationFrame(() => {
+        if (container) {
+          container.scrollTop = container.scrollHeight - prevScrollHeight + prevScrollTop;
+        }
+      });
+    } finally {
+      setIsLoadingOlder(false);
+    }
+  }
 
   useEffect(() => {
     function handleMessage(message) {
@@ -66,6 +99,10 @@ export function ChatPanel({ collaborationId, currentUserId }) {
   }, [collaborationId]);
 
   useEffect(() => {
+    if (isPrependingRef.current) {
+      isPrependingRef.current = false;
+      return;
+    }
     if (listRef.current) {
       listRef.current.scrollTop = listRef.current.scrollHeight;
     }
@@ -122,11 +159,26 @@ export function ChatPanel({ collaborationId, currentUserId }) {
       >
         <div ref={listRef} className="flex max-h-64 flex-col gap-2 overflow-y-auto lg:max-h-none lg:flex-1">
           {messages === null ? (
-            <p className="text-sm text-charcoal/40">Loading…</p>
+            <>
+              <ChatMessageSkeleton align="start" />
+              <ChatMessageSkeleton align="end" />
+              <ChatMessageSkeleton align="start" />
+            </>
           ) : messages.length === 0 ? (
             <p className="text-sm text-charcoal/40">No messages yet.</p>
           ) : (
-            messages.map((message, index) => {
+            <>
+              {hasMore && (
+                <button
+                  type="button"
+                  onClick={handleLoadEarlier}
+                  disabled={isLoadingOlder}
+                  className="self-center rounded-full border border-charcoal/15 px-3 py-1 text-xs text-charcoal/50 transition hover:border-indigo/40 hover:text-charcoal disabled:opacity-60"
+                >
+                  {isLoadingOlder ? 'Loading…' : 'Load earlier messages'}
+                </button>
+              )}
+              {messages.map((message, index) => {
               const isMine = message.sender._id === currentUserId;
               const previous = messages[index - 1];
               const showDateDivider =
@@ -157,7 +209,8 @@ export function ChatPanel({ collaborationId, currentUserId }) {
                   </div>
                 </div>
               );
-            })
+              })}
+            </>
           )}
         </div>
 

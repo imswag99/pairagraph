@@ -149,7 +149,39 @@ test('getById rejects a non-participant', async () => {
 
 test('getMine includes a collaboration the user participates in', async () => {
   const collab = await makeCollaboration();
-  const mine = await collaborationService.getMine(userA._id);
+  const { collaborations } = await collaborationService.getMine(userA._id);
 
-  assert.ok(mine.some((c) => c.id.toString() === collab._id.toString()));
+  assert.ok(collaborations.some((c) => c.id.toString() === collab._id.toString()));
+});
+
+test('getMine paginates and filters by status', async () => {
+  const inProgress = await makeCollaboration({ turnOwner: userA._id });
+  const completed = await makeCollaboration({ turnOwner: userA._id });
+  completed.status = 'completed';
+  await completed.save();
+
+  const activeOnly = await collaborationService.getMine(userA._id, { status: 'in_progress' });
+  assert.ok(activeOnly.collaborations.every((c) => c.status === 'in_progress'));
+  assert.ok(activeOnly.collaborations.some((c) => c.id.toString() === inProgress._id.toString()));
+  assert.ok(!activeOnly.collaborations.some((c) => c.id.toString() === completed._id.toString()));
+
+  const pageOne = await collaborationService.getMine(userA._id, { limit: 1, page: 1 });
+  assert.equal(pageOne.collaborations.length, 1);
+  assert.equal(pageOne.hasMore, pageOne.total > 1);
+});
+
+test('getTurnCount only counts in-progress collaborations where it is this user\'s turn', async () => {
+  const myTurn = await makeCollaboration({ turnOwner: userA._id });
+  const theirTurn = await makeCollaboration({ turnOwner: userB._id });
+
+  const count = await collaborationService.getTurnCount(userA._id);
+  assert.ok(count >= 1);
+
+  const collabIds = [myTurn._id, theirTurn._id];
+  const stillOwesUserA = await Collaboration.countDocuments({
+    _id: { $in: collabIds },
+    turnOwner: userA._id,
+    status: 'in_progress',
+  });
+  assert.equal(stillOwesUserA, 1);
 });

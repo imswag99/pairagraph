@@ -3,6 +3,7 @@ import { Navigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext.jsx';
 import { AppShell } from '../components/layout/AppShell.jsx';
 import { leaderboardService } from '../services/leaderboardService.js';
+import { LeaderboardRowSkeleton } from '../components/Skeleton.jsx';
 
 const RANGE_LABEL = {
   week: 'This week',
@@ -98,7 +99,11 @@ export function LeaderboardPage() {
       {error ? (
         <p className="text-sm text-red-600">{error}</p>
       ) : entries === null ? (
-        <p className="text-sm text-charcoal/50">Loading…</p>
+        <div className="flex flex-col overflow-hidden rounded-xl border border-charcoal/10 bg-white/50">
+          <LeaderboardRowSkeleton />
+          <LeaderboardRowSkeleton />
+          <LeaderboardRowSkeleton />
+        </div>
       ) : (
         <LeaderboardTable entries={entries} currentUserId={currentUser.id} />
       )}
