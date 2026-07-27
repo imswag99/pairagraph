@@ -1,0 +1,28 @@
+node_modules/
+dist/
+build/
+coverage/
+
+# Env files — everything except the checked-in templates
+.env*
+!.env.example
+
+# OS/editor cruft
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.swp
+*~
+
+# Logs
+*.log
+npm-debug.log*
+
+# Throwaway verification scripts (this project's convention for
+# one-off manual/live-server checks — always meant to be deleted,
+# this is just a safety net if one is ever left behind)
+tmp-*
+
+# Claude Code's personal/local settings (machine-specific, not shared config)
+.claude/settings.local.json

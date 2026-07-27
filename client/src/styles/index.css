@@ -1,0 +1,22 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+body {
+  @apply bg-paper text-charcoal antialiased;
+  font-family: theme('fontFamily.sans');
+}
+
+::selection {
+  @apply bg-indigo/20 text-charcoal;
+}
+
+.tiptap p.is-editor-empty:first-child::before {
+  content: attr(data-placeholder);
+  float: left;
+  height: 0;
+  pointer-events: none;
+  color: rgb(35 35 32 / 0.4);
+  font-family: theme('fontFamily.sans');
+  font-size: 0.875rem;
+}
