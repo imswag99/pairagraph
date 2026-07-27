@@ -3,13 +3,16 @@ import sgMail from '@sendgrid/mail';
 sgMail.setApiKey(process.env.SENDGRID_API_KEY);
 
 // EMAIL_FROM is stored as "Display Name <email@domain>"; SendGrid's helper
-// expects { name, email } rather than parsing that string itself.
+// expects { name, email } rather than parsing that string itself. Strip a
+// wrapping pair of double quotes first — unlike a local .env file, Render's
+// dashboard stores the value exactly as typed, quotes and all.
 function parseFromAddress(raw) {
-  const match = raw?.match(/^(.*?)\s*<(.+)>$/);
+  const unquoted = raw?.trim().replace(/^"(.*)"$/, '$1');
+  const match = unquoted?.match(/^(.*?)\s*<(.+)>$/);
   if (match) {
     return { name: match[1].replace(/^"|"$/g, ''), email: match[2] };
   }
-  return { email: raw };
+  return { email: unquoted };
 }
 
 const from = parseFromAddress(process.env.EMAIL_FROM);
