@@ -42,6 +42,7 @@ Last reviewed: 2026-07-28, after migrating email from SendGrid to Brevo ahead of
 
 16. **Gemini's 20/day free-tier ceiling** for AI-generated keywords — a deliberate cost decision, not a limitation to fix. Falls back to a local keyword pool once exhausted.
 17. **`EMAIL_FROM` is a free Gmail address, not a verified custom domain** — confirmed in production testing: the email provider reports successful delivery, but the email lands in Gmail's Spam folder rather than the inbox (Gmail treats mail claiming to be `@gmail.com` but not sent through Google's own servers as suspicious, especially Gmail-to-Gmail). Fixing it properly means buying a domain, which isn't free — for now, the UI/support messaging should tell users to check spam if a reset/verification email seems missing.
+18. **Brevo's free plan (300 emails/day, permanent — confirmed via their pricing/docs) adds a "Sent with Brevo" footer/logo** to outgoing emails, including transactional ones like password reset/verification. Removing it is a paid add-on ($9/mo). Cosmetic only, not fixed given the no-cost constraint.
 
 ---
 
