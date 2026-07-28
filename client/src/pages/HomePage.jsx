@@ -164,7 +164,7 @@ function Dashboard({ currentUser, logout }) {
 }
 
 export function HomePage() {
-  const { currentUser, isLoading, logout } = useAuth();
+  const { currentUser, isLoading, isSlow, logout } = useAuth();
   const [activeModal, setActiveModal] = useState(null);
 
   useEffect(() => {
@@ -175,8 +175,13 @@ export function HomePage() {
 
   if (isLoading) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-paper text-sm text-charcoal/50">
-        Loading…
+      <div className="flex min-h-screen flex-col items-center justify-center gap-2 bg-paper text-sm text-charcoal/50">
+        <p>Loading…</p>
+        {isSlow && (
+          <p className="max-w-xs text-center text-xs text-charcoal/40">
+            Waking up the server after a period of inactivity — this can take up to a minute.
+          </p>
+        )}
       </div>
     );
   }

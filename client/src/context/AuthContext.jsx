@@ -6,6 +6,20 @@ const AuthContext = createContext(null);
 export function AuthProvider({ children }) {
   const [currentUser, setCurrentUser] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [isSlow, setIsSlow] = useState(false);
+
+  // Render's free tier sleeps the backend after ~15 min idle; the first
+  // request can take 30-60s to wake it. Only surface a "this is slow"
+  // signal once it's actually been a few seconds, so a normal fast load
+  // never shows it.
+  useEffect(() => {
+    if (!isLoading) {
+      setIsSlow(false);
+      return;
+    }
+    const timer = setTimeout(() => setIsSlow(true), 3000);
+    return () => clearTimeout(timer);
+  }, [isLoading]);
 
   useEffect(() => {
     async function restoreSession() {
@@ -74,6 +88,7 @@ export function AuthProvider({ children }) {
   const value = {
     currentUser,
     isLoading,
+    isSlow,
     isAuthenticated: Boolean(currentUser),
     register,
     verifyEmail,
