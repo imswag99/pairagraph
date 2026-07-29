@@ -90,6 +90,10 @@ export async function login({ email, password }) {
     throw new ApiError(401, 'Invalid email or password');
   }
 
+  if (user.isBanned) {
+    throw new ApiError(403, 'This account has been suspended.');
+  }
+
   if (!user.isEmailVerified) {
     throw new ApiError(403, 'Please verify your email before logging in');
   }
@@ -126,6 +130,10 @@ export async function googleLogin(idToken) {
         isEmailVerified: true,
       });
     }
+  }
+
+  if (user.isBanned) {
+    throw new ApiError(403, 'This account has been suspended.');
   }
 
   const tokens = await issueTokens(user);

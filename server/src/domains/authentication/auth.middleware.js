@@ -27,3 +27,21 @@ export async function requireAdmin(req, res, next) {
   }
   next();
 }
+
+// Gates the specific endpoints where a user actually acts as a writing
+// participant (joining/redeeming, submitting a turn, chatting). A ban only
+// blocks login going forward — an already-issued access token still passes
+// requireAuth until it expires (JWT_ACCESS_EXPIRES) — so this is what makes a
+// ban take effect immediately on the entry points that matter, same
+// fresh-DB-check pattern as requireAdmin. Admin accounts are blocked here too
+// so promoting someone to admin also immediately retires them as a writer.
+export async function blockInactiveParticipant(req, res, next) {
+  const user = await User.findById(req.user.id).select('role isBanned');
+  if (user?.isBanned) {
+    return next(new ApiError(403, 'Your account has been suspended.'));
+  }
+  if (user?.role === 'admin') {
+    return next(new ApiError(403, "Admin accounts can't participate in collaborations."));
+  }
+  next();
+}

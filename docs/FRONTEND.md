@@ -18,7 +18,7 @@ client/src/
 │   ├── auth/       Modal, LoginModal, RegisterModal, ForgotPasswordModal, GoogleSignInButton
 │   ├── collaboration/   RichTextEditor, TurnComposer, EntryList, CompletionControls,
 │   │                    KeywordChips, ChatPanel, CollaborationCard, QuickMatchPanel, InvitePanel
-│   ├── layout/     AppShell, SidebarNav
+│   ├── layout/     AppShell, SidebarNav, AdminShell
 │   ├── PenMark.jsx     logo mark
 │   └── Skeleton.jsx    loading-state placeholders
 ├── context/        AuthContext.jsx
@@ -29,7 +29,7 @@ client/src/
 └── utils/          exportCollaborationPdf.js
 ```
 
-**Routing** (`app/routes.jsx`): `/`, `/verify-email/:token`, `/collaborations`, `/collaborations/:id`, `/leaderboard`, `/invite/:code`, `/reset-password/:token`, `/account`, and a `*` catch-all → `NotFoundPage`. The same file owns the Socket.IO connection lifecycle: `socket.connect()`/`disconnect()` are tied to `isAuthenticated`, and it globally listens for `matchmaking:matched`/`invite:redeemed` to navigate straight into the new collaboration — these two events can fire while the user is sitting on any page, not just a collaboration-specific one, so the listener lives at the routing level rather than in a page component.
+**Routing** (`app/routes.jsx`): `/`, `/verify-email/:token`, `/collaborations`, `/collaborations/:id`, `/leaderboard`, `/invite/:code`, `/reset-password/:token`, `/account`, `/privacy`, `/terms`, `/admin`, `/admin/users`, and a `*` catch-all → `NotFoundPage`. The same file owns the Socket.IO connection lifecycle: `socket.connect()`/`disconnect()` are tied to `isAuthenticated`, and it globally listens for `matchmaking:matched`/`invite:redeemed` to navigate straight into the new collaboration — these two events can fire while the user is sitting on any page, not just a collaboration-specific one, so the listener lives at the routing level rather than in a page component.
 
 ---
 
@@ -37,17 +37,18 @@ client/src/
 
 | Route | Page | Notes |
 |---|---|---|
-| `/` | `HomePage` | Branches on auth state: an unauthenticated `Hero` (logo, tagline, log in/sign up) vs. an authenticated `Dashboard` (animated hero + "Start something new"). No collaboration data is fetched here — deliberately decluttered (§4). |
+| `/` | `HomePage` | Branches on auth state: an unauthenticated `Hero` (logo, tagline, log in/sign up) vs. an authenticated `Dashboard` (animated hero + "Start something new") — or, for an admin account, an immediate redirect to `/admin` (§5). No collaboration data is fetched here — deliberately decluttered (§4). |
 | `/verify-email/:token` | `VerifyEmailPage` | Calls the verify endpoint on mount, shows success/error. |
-| `/collaborations` | `CollaborationsPage` | "Continue writing" (active, unpaginated) + "Past collaborations" (paginated, "Load more"). See §6. |
-| `/collaborations/:id` | `CollaborationPage` | The actual writing loop — see §5. |
-| `/leaderboard` | `LeaderboardPage` | Week/all-time ranked table. See §8. |
+| `/collaborations` | `CollaborationsPage` | "Continue writing" (active, unpaginated) + "Past collaborations" (paginated, "Load more"). See §7. |
+| `/collaborations/:id` | `CollaborationPage` | The actual writing loop — see §6. |
+| `/leaderboard` | `LeaderboardPage` | Week/all-time ranked table. See §9. |
 | `/invite/:code` | `InvitePage` | Redeems the invite if logged in; otherwise shows a landing prompt with login/register modals. |
 | `/reset-password/:token` | `ResetPasswordPage` | New-password form, reached only via the emailed link. |
-| `/account` | `AccountPage` | Change display name, change password, blocked users, delete account. See §9. |
+| `/account` | `AccountPage` | Change display name, change password, blocked users, delete account. See §10. |
 | `/privacy` | `PrivacyPolicyPage` | Static page, linked from the landing footer, the logged-in app shell footer, and the signup disclaimer. |
 | `/terms` | `TermsOfServicePage` | Same linking pattern as Privacy. |
-| `/admin` | `AdminReportsPage` | Gated to `currentUser.role === 'admin'` (redirects home otherwise) — lists filed reports with a "Mark reviewed" action. See §9. |
+| `/admin` | `AdminReportsPage` | Gated to `currentUser.role === 'admin'` (redirects home otherwise) — lists filed reports, each expandable inline into the reported collaboration's entries + chat, with a "Mark reviewed" action. See §5. |
+| `/admin/users` | `AdminUsersPage` | Same gating — every user, open-report counts, ban/unban, delete. See §5. |
 | `*` | `NotFoundPage` | Catch-all for any unmatched path. |
 
 ---
@@ -66,11 +67,23 @@ client/src/
 
 `AppShell` (header + `SidebarNav` + `<main>`) is the shared chrome for every authenticated page except `CollaborationPage` (which has its own distinct header — back link + partner name — since it's a focused writing view, not part of the dashboard family).
 
-`SidebarNav` is a horizontal tab row on narrow screens, a vertical sidebar at `lg:` and up (matches the responsive pattern used elsewhere). It fetches `GET /collaborations/turn-count` on mount and shows a small pill badge on the "Collaborations" link when it's greater than zero — a lightweight, purpose-built count endpoint rather than fetching full collaboration data just to derive a number. An "Admin" link renders conditionally when `currentUser?.role === 'admin'` — invisible to every other user, the only nav item that isn't unconditional.
+`SidebarNav` is a horizontal tab row on narrow screens, a vertical sidebar at `lg:` and up (matches the responsive pattern used elsewhere). It fetches `GET /collaborations/turn-count` on mount and shows a small pill badge on the "Collaborations" link when it's greater than zero — a lightweight, purpose-built count endpoint rather than fetching full collaboration data just to derive a number.
+
+**An admin account never renders `AppShell`/`SidebarNav` at all.** An earlier pass added a conditional "Admin" link to `SidebarNav` — since removed, because it left an admin account able to reach every writer page (Quick Match, invites, the writing loop itself) through the exact same nav as everyone else. `HomePage` now redirects an admin straight to `/admin` instead of rendering the writer `Dashboard`, and both admin pages use a separate `AdminShell` with its own two-item nav (Reports, Users) — see §5.
 
 ---
 
-## 5. The writing loop (`CollaborationPage`)
+## 5. Admin experience
+
+**Why a separate shell:** the admin panel started as one more gated page inside the regular writer chrome (`AppShell`/`SidebarNav`) — which meant an admin account could still Quick Match, redeem invites, and write turns like anyone else, and "Admin" was just another tab. Closed by giving admin its own path end to end: `AdminShell` (own header badge, own two-item nav — Reports, Users, no Collaborations/Leaderboard) replaces `AppShell` on both admin pages, and `HomePage`'s `Dashboard` branch redirects an admin straight to `/admin` (`<Navigate to="/admin" replace />`) rather than ever rendering the writer dashboard. The backend enforces the writer-side half of this independently (`blockInactiveParticipant`, `BACKEND.md` §2) — the frontend change is about what an admin *sees*, not the only thing stopping them from writing.
+
+**`AdminReportsPage`** (gates the same way `AccountPage` gates on `currentUser` — `if (currentUser?.role !== 'admin') return <Navigate to="/" replace />`): fetches `GET /moderation/reports` on mount, renders each as a card (reason, reporter/reported-user name + email, optional details, a "Mark reviewed" button that calls `PATCH /moderation/reports/:id` and swaps just that card's data in local state rather than refetching the list). "View collaboration" used to link straight to `/collaborations/:id` — broken for an admin who isn't a participant there (`findAccessible`, `BACKEND.md` §3, rejects them with a 403). Replaced with an inline expand/collapse toggle: a `CollaborationPreview` sub-component fetches `GET /admin/collaborations/:id` (no participant check, `BACKEND.md` §10) on first expand and renders the entries and chat history read-only underneath the report row — deliberately not a reuse of `CollaborationPage`, since that page is full of participant-only actions (Report/Block/Leave, the turn composer, chat send) that make no sense for a reviewing admin.
+
+**`AdminUsersPage`**: every user from `GET /admin/users` (already merged server-side with an open-report count), each row showing an open-report badge when >0, Banned/Deleted badges, and — unless the row is the admin's own account, another admin, or already deleted — a Ban/Unban toggle and a Delete action (two-step inline confirm, the same "Leave?"-style pattern `CollaborationPage` already uses for Block/Leave rather than a modal). Self and other-admin rows render with no action buttons at all instead of disabling them, since there's nothing a click there could ever legitimately do.
+
+---
+
+## 6. The writing loop (`CollaborationPage`)
 
 Layout: a two-column grid at `lg:` and up — main content (instructions, entries, composer, completion controls) on the left, `ChatPanel` as a **persistent sticky sidebar** on the right; below `lg:`, chat becomes a collapsible accordion instead (no room for a second column on a phone).
 
@@ -78,13 +91,13 @@ Layout: a two-column grid at `lg:` and up — main content (instructions, entrie
 - **`EntryList`** renders each turn's HTML via `dangerouslySetInnerHTML` (safe here specifically because the input surface is fully controlled by the trimmed Tiptap config — it can only ever produce `<p>`/`<strong>`/`<em>`, never arbitrary attributes or scripts) with `break-words` so a long unbroken string can't blow out the layout.
 - **`CompletionControls`** is a three-state component driven entirely by `self.hasApproved`/`other.hasApproved`: "suggest wrapping up" → "waiting on the other person" → "they want to wrap up, agree or decline."
 - **Real-time:** the page listens for `collaboration:updated` (turn submitted or completion responded to, from either side) and replaces its local state wholesale — no polling, no manual refresh.
-- **PDF export** (§10) appears as a button next to the status label, only once `status === 'completed'`.
+- **PDF export** (§11) appears as a button next to the status label, only once `status === 'completed'`.
 - **Report/Block/Leave:** next to the partner's name in the header, a "Report" button opens `ReportModal` (reason dropdown + optional details, mirrors `ForgotPasswordModal`'s state pattern); "Block" and "Leave" are both two-step inline confirms ("Block?"/"Leave?" + Yes/Cancel) rather than modals, since they're single low-ambiguity actions. Blocking doesn't touch the current collaboration (only affects future matching, `BACKEND.md` §9) — the page's own state is untouched. Leaving does: the response replaces `collaboration` the same way submitting a turn does, so the page immediately reflects the frozen `'left'` status for the leaver, and the other participant sees it live via the existing `collaboration:updated` socket listener with zero extra wiring. Only shown while `status === 'in_progress'` — once left, there's nothing left to leave.
 - **After leaving:** the generic "This collaboration is {status}." fallback text is skipped for `status === 'left'` in favor of a specific message using the new `leftBy` field — "You left this collaboration." or "{name} left this collaboration." depending on the viewer, since the generic phrasing didn't read naturally for this one case. `ChatPanel` receives a new `isActive={status === 'in_progress'}` prop and disables its send form (replacing it with "This conversation has ended.") once false — reading old messages stays available either way, only new sends are blocked, matching the backend's own read/write split.
 
 ---
 
-## 6. Collaborations list (`CollaborationsPage`)
+## 7. Collaborations list (`CollaborationsPage`)
 
 Two independently-fetched lists:
 - **Active** (`status=in_progress`): fetched once with a generous limit (50) — no pagination, since a user realistically has few simultaneous in-progress collaborations and all of them plausibly need attention.
@@ -94,7 +107,7 @@ Both use the shared `CollaborationCard` (also used standalone nowhere else now �
 
 ---
 
-## 7. Chat (`ChatPanel`)
+## 8. Chat (`ChatPanel`)
 
 - **Responsive dual-mode:** persistent sticky sidebar at `lg:` and up, collapsible accordion below it — controlled by the same `isOpen` state, with CSS (`lg:flex` override) rather than a media-query listener deciding which mode actually applies.
 - **Real-time:** `chat:message` appends to the open conversation; `chat:typing` drives a "Typing…" indicator that hides itself if no new ping arrives within 2.5s, since the server only ever relays "typing right now," never "stopped" (there's no such event to relay).
@@ -104,7 +117,7 @@ Both use the shared `CollaborationCard` (also used standalone nowhere else now �
 
 ---
 
-## 8. Matchmaking, invites, and the leaderboard
+## 9. Matchmaking, invites, and the leaderboard
 
 - **`QuickMatchPanel`**: join/cancel the matchmaking queue, polls its own status once on mount to resume a "waiting…" state after a refresh.
 - **`InvitePanel`**: a segmented Create/Join control (`aria-pressed` reflects the active tab). Join accepts either a bare invite code or a full pasted URL (extracts the last path segment).
@@ -112,15 +125,13 @@ Both use the shared `CollaborationCard` (also used standalone nowhere else now �
 
 ---
 
-## 9. Account management (`AccountPage`)
+## 10. Account management (`AccountPage`)
 
 Four independent sections, each with its own local loading/error/success state: **Profile** (display name), **Password** (hidden behind a "this account uses Google, no password set" message if `hasPassword` is false — the on-ramp being "Forgot password" from the login screen, which lets a Google-only account set one), **Blocked users** (fetched via `GET /moderation/blocks` on mount, each row a display name + "Unblock" button that calls `DELETE /moderation/blocks/:userId` and removes the row from local state directly rather than refetching), and a **Danger zone** (delete account, gated behind typing the literal word "delete" into a confirmation input before the button enables).
 
-**`AdminReportsPage`** (admin-only, see §2, §4): gates the same way `AccountPage` gates on `currentUser` — `if (currentUser?.role !== 'admin') return <Navigate to="/" replace />`. Fetches `GET /moderation/reports` on mount and renders each as a card: reason, reporter/reported-user name + email, optional details text, a link straight into `/collaborations/:id` for context, and a "Mark reviewed" button that calls `PATCH /moderation/reports/:id` and swaps just that one card's data in local state (`prev.map(...)`) rather than refetching the whole list.
-
 ---
 
-## 10. PDF export (`utils/exportCollaborationPdf.js`)
+## 11. PDF export (`utils/exportCollaborationPdf.js`)
 
 Generates a PDF via `jsPDF` reading as one continuous piece — entries are joined into flowing prose (paragraphs for stories, stacked lines for poems), with **no per-turn author labels**, unlike the on-screen `EntryList`. A "Written by A & B" byline closes it out.
 
@@ -134,7 +145,7 @@ Verified directly (not just read): unit-tested run-parsing (plain/bold/nested-it
 
 ---
 
-## 11. Styling & theme
+## 12. Styling & theme
 
 Tailwind config extends a small custom palette (`charcoal`, `paper`, `indigo` + light/dark/tint variants) and three keyframe animations (`fade-in`, `modal-in`, `backdrop-in`). Serif (`Iowan Old Style`/`Palatino`) for written content, sans (system UI stack) for chrome — a deliberate split between "the page" and "the app around the page."
 
@@ -144,13 +155,13 @@ Tailwind config extends a small custom palette (`charcoal`, `paper`, `indigo` + 
 
 ---
 
-## 12. Real-time (`sockets/socket.js`)
+## 13. Real-time (`sockets/socket.js`)
 
 A single `socket.io-client` instance (`autoConnect: false`) connected/disconnected by `AppRoutes` based on auth state. Events consumed across the app: `collaboration:updated` (turns/completion), `chat:message`, `chat:typing`, `matchmaking:matched`, `invite:redeemed`. Every listener is registered in a `useEffect` and torn down in its cleanup — no listener leaks across route changes.
 
 ---
 
-## 13. Accessibility
+## 14. Accessibility
 
 Semantic landmarks (`<header>`, `<main>`, `<nav>`) were already in place. An explicit pass added:
 - `aria-expanded` + `aria-controls` on the chat panel's collapse toggle (previously a bare "⌄" with no exposed state).
@@ -162,7 +173,7 @@ Semantic landmarks (`<header>`, `<main>`, `<nav>`) were already in place. An exp
 
 ---
 
-## 14. Bugs found and fixed (frontend)
+## 15. Bugs found and fixed (frontend)
 
 | # | Bug | Root cause | Fix |
 |---|---|---|---|
@@ -179,12 +190,13 @@ Semantic landmarks (`<header>`, `<main>`, `<nav>`) were already in place. An exp
 | 11 | Chat bubbles and story/poem entries had no defense against a long unbroken string (e.g. a pasted URL) | No `break-words` on free-form content containers | Added `break-words` to both |
 | 12 | The dashboard hero's only interactive element scrolled to content already visible one glance below it | A "Start writing" button was added as a CTA without checking whether it was actually needed, given the panels it targeted were already near the top of the page | Removed the button; replaced with actual atmosphere (staggered entrance motion, ambient gradient drift, a rotating inspiration word) — motion earns the hero's place instead of a fake action |
 | 13 | An unused `constants/colors.js` file existed with zero imports anywhere in the codebase | Left over from an earlier pass, likely originally intended for the PDF export before that ended up not needing raw hex values | Deleted; confirmed via full-codebase grep that nothing referenced it and the build was unaffected |
+| 14 | An admin account saw the exact same nav/dashboard as a writer, plus the admin report list's "View collaboration" link 403'd whenever the admin wasn't a participant in the reported collaboration | `AdminReportsPage` reused `AppShell`/`SidebarNav` (the writer chrome) and linked straight to the participant-gated `/collaborations/:id` — nothing about the frontend routing treated an admin account differently at all | Gave admin its own `AdminShell` + redirect-on-login (§5), and replaced the broken link with an inline, admin-only, no-participant-check preview fetched from a new backend endpoint |
 
 ---
 
-## 15. Known limitations
+## 16. Known limitations
 
 - **No automated frontend test coverage** — no Vitest/React Testing Library, no Playwright. Every behavior described in this document has been verified by manual reasoning, live curl/socket scripts during development, or production-build checks — not by a repeatable test suite. This is the single biggest gap on the frontend side.
-- **No real accessibility audit** beyond the icon-only-control pass in §13 — contrast ratios, keyboard tab order, and screen-reader flow through multi-step forms haven't been systematically checked.
+- **No real accessibility audit** beyond the icon-only-control pass in §14 — contrast ratios, keyboard tab order, and screen-reader flow through multi-step forms haven't been systematically checked.
 - **Large single JS bundle** — the production build warns about a >1MB main chunk (Tiptap + jsPDF + framer-motion all load upfront). Code-splitting (`React.lazy` per route, at minimum) would help but hasn't been done.
 - **No offline/error-boundary handling** for unexpected render errors — a thrown error in a component tree currently has no `ErrorBoundary` catching it gracefully.

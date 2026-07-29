@@ -13,6 +13,7 @@ import { AccountPage } from '../pages/AccountPage.jsx';
 import { PrivacyPolicyPage } from '../pages/PrivacyPolicyPage.jsx';
 import { TermsOfServicePage } from '../pages/TermsOfServicePage.jsx';
 import { AdminReportsPage } from '../pages/AdminReportsPage.jsx';
+import { AdminUsersPage } from '../pages/AdminUsersPage.jsx';
 import { NotFoundPage } from '../pages/NotFoundPage.jsx';
 
 export function AppRoutes() {
@@ -51,6 +52,7 @@ export function AppRoutes() {
       <Route path="/privacy" element={<PrivacyPolicyPage />} />
       <Route path="/terms" element={<TermsOfServicePage />} />
       <Route path="/admin" element={<AdminReportsPage />} />
+      <Route path="/admin/users" element={<AdminUsersPage />} />
       <Route path="*" element={<NotFoundPage />} />
     </Routes>
   );

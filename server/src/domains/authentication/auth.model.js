@@ -14,6 +14,7 @@ const userSchema = new mongoose.Schema(
     passwordResetTokenHash: { type: String },
     passwordResetExpires: { type: Date },
     isDeleted: { type: Boolean, default: false },
+    isBanned: { type: Boolean, default: false },
     blockedUsers: { type: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }], default: [] },
     role: { type: String, enum: ['user', 'admin'], default: 'user' },
   },

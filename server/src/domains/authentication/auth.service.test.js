@@ -110,6 +110,23 @@ test('login rejects the wrong password', async () => {
   );
 });
 
+test('login rejects a banned account, even with the correct password', async () => {
+  const loginEmail = email('banned-login');
+  await authService.register({
+    email: loginEmail,
+    password: 'correct-horse-1',
+    displayName: 'Banned',
+  });
+  const rawToken = mailer.sendVerificationEmail.mock.calls.at(-1).arguments[1];
+  await authService.verifyEmail(rawToken);
+  await User.updateOne({ email: loginEmail }, { isBanned: true });
+
+  await assert.rejects(
+    () => authService.login({ email: loginEmail, password: 'correct-horse-1' }),
+    (err) => err.statusCode === 403
+  );
+});
+
 test('requestPasswordReset silently no-ops for an unknown email', async () => {
   await authService.requestPasswordReset(email('does-not-exist'));
   assert.equal(mailer.sendPasswordResetEmail.mock.calls.length, 0);

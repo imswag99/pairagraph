@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react';
-import { Navigate, Link } from 'react-router-dom';
+import { Navigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext.jsx';
-import { AppShell } from '../components/layout/AppShell.jsx';
+import { AdminShell } from '../components/layout/AdminShell.jsx';
 import { moderationService } from '../services/moderationService.js';
+import { adminService } from '../services/adminService.js';
 
 const REASON_LABEL = {
   harassment: 'Harassment',
@@ -20,8 +21,60 @@ function formatDate(dateString) {
   });
 }
 
+function CollaborationPreview({ collaborationId }) {
+  const [data, setData] = useState(null);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    adminService
+      .getCollaboration(collaborationId)
+      .then(({ data }) => setData(data))
+      .catch((err) => setError(err.message));
+  }, [collaborationId]);
+
+  if (error) return <p className="text-xs text-red-600">{error}</p>;
+  if (!data) return <p className="text-xs text-charcoal/40">Loading…</p>;
+
+  const { collaboration, messages } = data;
+
+  return (
+    <div className="flex flex-col gap-4 rounded-lg bg-charcoal/[0.03] p-4">
+      <div className="flex flex-col gap-3">
+        <span className="text-xs uppercase tracking-wide text-charcoal/40">Entries</span>
+        {collaboration.entries.length === 0 ? (
+          <p className="text-sm text-charcoal/40">No entries yet.</p>
+        ) : (
+          collaboration.entries.map((entry, index) => (
+            <div key={index} className="flex flex-col gap-1">
+              <div
+                className="break-words font-serif text-sm leading-relaxed text-charcoal [&_p]:m-0"
+                dangerouslySetInnerHTML={{ __html: entry.content }}
+              />
+              <span className="text-xs text-charcoal/40">— {entry.author.displayName}</span>
+            </div>
+          ))
+        )}
+      </div>
+
+      <div className="flex flex-col gap-2">
+        <span className="text-xs uppercase tracking-wide text-charcoal/40">Chat</span>
+        {messages.length === 0 ? (
+          <p className="text-sm text-charcoal/40">No chat messages.</p>
+        ) : (
+          messages.map((message) => (
+            <p key={message._id} className="text-sm text-charcoal">
+              <strong>{message.sender.displayName}:</strong> {message.content}
+            </p>
+          ))
+        )}
+      </div>
+    </div>
+  );
+}
+
 function ReportRow({ report, onMarkReviewed }) {
   const [isSaving, setIsSaving] = useState(false);
+  const [isExpanded, setIsExpanded] = useState(false);
 
   async function handleMarkReviewed() {
     setIsSaving(true);
@@ -50,12 +103,13 @@ function ReportRow({ report, onMarkReviewed }) {
       {report.details && <p className="text-sm text-charcoal/60">{report.details}</p>}
 
       <div className="flex items-center gap-3">
-        <Link
-          to={`/collaborations/${report.collaboration}`}
+        <button
+          type="button"
+          onClick={() => setIsExpanded((expanded) => !expanded)}
           className="text-xs text-indigo-dark underline decoration-indigo/30 underline-offset-4 hover:text-indigo"
         >
-          View collaboration
-        </Link>
+          {isExpanded ? 'Hide collaboration' : 'View collaboration'}
+        </button>
         {report.status === 'reviewed' ? (
           <span className="text-xs text-charcoal/40">Reviewed</span>
         ) : (
@@ -69,6 +123,8 @@ function ReportRow({ report, onMarkReviewed }) {
           </button>
         )}
       </div>
+
+      {isExpanded && <CollaborationPreview collaborationId={report.collaboration} />}
     </div>
   );
 }
@@ -95,7 +151,7 @@ export function AdminReportsPage() {
   if (currentUser?.role !== 'admin') return <Navigate to="/" replace />;
 
   return (
-    <AppShell currentUser={currentUser} logout={logout}>
+    <AdminShell currentUser={currentUser} logout={logout}>
       <h1 className="font-serif text-2xl text-charcoal">Reports</h1>
 
       {error ? (
@@ -113,6 +169,6 @@ export function AdminReportsPage() {
           ))}
         </div>
       )}
-    </AppShell>
+    </AdminShell>
   );
 }

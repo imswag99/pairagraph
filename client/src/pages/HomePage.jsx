@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, Navigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAuth } from '../context/AuthContext.jsx';
 import { LoginModal } from '../components/auth/LoginModal.jsx';
@@ -159,6 +159,10 @@ function DashboardHero({ displayName }) {
 }
 
 function Dashboard({ currentUser, logout }) {
+  if (currentUser.role === 'admin') {
+    return <Navigate to="/admin" replace />;
+  }
+
   return (
     <AppShell currentUser={currentUser} logout={logout}>
       <DashboardHero displayName={currentUser.displayName} />

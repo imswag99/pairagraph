@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { requireAuth } from '../authentication/auth.middleware.js';
+import { requireAuth, blockInactiveParticipant } from '../authentication/auth.middleware.js';
 import {
   createInviteHandler,
   redeemInviteHandler,
@@ -11,9 +11,9 @@ const router = Router();
 
 router.use(requireAuth);
 
-router.post('/', createInviteHandler);
+router.post('/', blockInactiveParticipant, createInviteHandler);
 router.get('/', listMineHandler);
-router.post('/:code/redeem', redeemInviteHandler);
+router.post('/:code/redeem', blockInactiveParticipant, redeemInviteHandler);
 router.delete('/:id', cancelInviteHandler);
 
 export default router;
