@@ -1,7 +1,8 @@
-import { useState } from 'react';
+import { useCallback, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Modal } from './Modal.jsx';
 import { GoogleSignInButton } from './GoogleSignInButton.jsx';
+import { TurnstileWidget } from './TurnstileWidget.jsx';
 import { useAuth } from '../../context/AuthContext.jsx';
 
 const inputClasses =
@@ -12,9 +13,14 @@ export function RegisterModal({ isOpen, onClose }) {
   const [displayName, setDisplayName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [captchaToken, setCaptchaToken] = useState('');
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // Stable across re-renders (e.g. every keystroke in the fields above) so
+  // TurnstileWidget's effect doesn't re-run and reset the widget mid-form-fill.
+  const handleCaptchaReset = useCallback(() => setCaptchaToken(''), []);
 
   async function handleSubmit(e) {
     e.preventDefault();
@@ -22,7 +28,7 @@ export function RegisterModal({ isOpen, onClose }) {
     setMessage('');
     setIsSubmitting(true);
     try {
-      const { message: successMessage } = await register({ displayName, email, password });
+      const { message: successMessage } = await register({ displayName, email, password, captchaToken });
       setMessage(successMessage);
     } catch (err) {
       setError(err.message);
@@ -59,11 +65,16 @@ export function RegisterModal({ isOpen, onClose }) {
           minLength={8}
           className={inputClasses}
         />
+        <TurnstileWidget
+          onVerify={setCaptchaToken}
+          onExpire={handleCaptchaReset}
+          onError={handleCaptchaReset}
+        />
         {error && <p className="text-sm text-red-600">{error}</p>}
         {message && <p className="text-sm text-indigo-dark">{message}</p>}
         <button
           type="submit"
-          disabled={isSubmitting}
+          disabled={isSubmitting || !captchaToken}
           className="w-full rounded-lg bg-indigo py-2.5 text-sm font-medium text-paper shadow-soft transition hover:bg-indigo-dark disabled:opacity-60"
         >
           {isSubmitting ? 'Creating account…' : 'Create account'}

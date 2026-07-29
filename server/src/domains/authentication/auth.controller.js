@@ -32,7 +32,7 @@ function clearAuthCookies(res) {
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 export const registerHandler = asyncHandler(async (req, res) => {
-  const { email, password, displayName } = req.body;
+  const { email, password, displayName, captchaToken } = req.body;
 
   if (!email || !EMAIL_RE.test(email)) {
     throw new ApiError(400, 'A valid email is required');
@@ -44,7 +44,13 @@ export const registerHandler = asyncHandler(async (req, res) => {
     throw new ApiError(400, 'Display name is required');
   }
 
-  const user = await authService.register({ email, password, displayName: displayName.trim() });
+  const user = await authService.register({
+    email,
+    password,
+    displayName: displayName.trim(),
+    captchaToken,
+    ip: req.ip,
+  });
   res.status(201).json({
     success: true,
     message: "Account created. Check your email to verify your address (don't see it? check spam).",

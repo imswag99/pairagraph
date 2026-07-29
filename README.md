@@ -6,7 +6,7 @@ Pairagraph is a turn-based collaborative writing app: two people are paired up (
 
 ## Features
 
-- **Email/password and Google sign-in**, with email verification, password reset, and account management (change display name/password, delete account).
+- **Email/password and Google sign-in**, with email verification, password reset, account management (change display name/password, delete account), and a Cloudflare Turnstile CAPTCHA on registration to keep it from being spammed.
 - **Turn-based writing** — one paragraph per turn for stories, one line per turn for poems, enforced both in the editor and on the server.
 - **Quick Match** (paired with a random waiting partner) and **invite links** as the two ways to start a collaboration.
 - **AI-generated keywords** (Google Gemini, with a local fallback pool) for inspiration on every new collaboration.
@@ -56,7 +56,7 @@ cp server/.env.example server/.env
 cp client/.env.example client/.env
 ```
 
-`server/.env` needs a MongoDB URI, JWT secrets, a Brevo API key + verified sender address (for verification/reset emails), a Google OAuth client ID, and optionally a Gemini API key (falls back to a local keyword pool if omitted). `client/.env` needs the API URL and the same Google OAuth client ID.
+`server/.env` needs a MongoDB URI, JWT secrets, a Brevo API key + verified sender address (for verification/reset emails), a Google OAuth client ID, optionally a Gemini API key (falls back to a local keyword pool if omitted), and optionally a Cloudflare Turnstile secret key (`CAPTCHA_SECRET_KEY` — registration's CAPTCHA check is bypassed entirely if this is left unset, same as the Gemini key). `client/.env` needs the API URL, the same Google OAuth client ID, and the matching Turnstile site key (`VITE_CAPTCHA_SITE_KEY`).
 
 ### 3. Run both dev servers
 
@@ -81,7 +81,7 @@ npm run dev       # http://localhost:5173
 
 ## Testing
 
-The backend has an automated test suite (`server/npm test`, 79 tests) covering auth, the turn-based writing rules, matchmaking, invites, the leaderboard, report/block moderation, and admin user management — it runs in CI on every push and pull request (see `.github/workflows/server-tests.yml`). The frontend does not yet have automated tests; see `docs/FRONTEND.md` for details and known gaps.
+The backend has an automated test suite (`server/npm test`, 83 tests) covering auth, the turn-based writing rules, matchmaking, invites, the leaderboard, report/block moderation, and admin user management — it runs in CI on every push and pull request (see `.github/workflows/server-tests.yml`). The frontend does not yet have automated tests; see `docs/FRONTEND.md` for details and known gaps.
 
 ## License
 

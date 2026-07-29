@@ -5,6 +5,8 @@ import { Invite } from '../invite/invite.model.js';
 import { MatchQueueEntry } from '../matchmaking/matchmaking.model.js';
 import { ApiError } from '../../utils/ApiError.js';
 import { mailer } from '../../utils/mailer.js';
+import { logger } from '../../utils/logger.js';
+import { turnstile } from '../../utils/turnstile.js';
 import {
   generateAccessToken,
   generateRefreshToken,
@@ -37,7 +39,12 @@ async function issueTokens(user) {
   return { accessToken, refreshToken };
 }
 
-export async function register({ email, password, displayName }) {
+export async function register({ email, password, displayName, captchaToken, ip }) {
+  const isHuman = await turnstile.verifyToken(captchaToken, ip);
+  if (!isHuman) {
+    throw new ApiError(400, 'CAPTCHA verification failed. Please try again.');
+  }
+
   const existing = await User.findOne({ email });
   if (existing) {
     throw new ApiError(409, 'An account with this email already exists');
@@ -182,7 +189,7 @@ export async function requestPasswordReset(email) {
 
   if (user.authProvider === 'google' && !user.passwordHash) {
     mailer.sendGoogleAccountNoticeEmail(user.email).catch((err) => {
-      console.error('Failed to send Google-account notice email:', err.body ?? err);
+      logger.error('Failed to send Google-account notice email', { error: err.body ?? err.message });
     });
     return;
   }
@@ -193,7 +200,7 @@ export async function requestPasswordReset(email) {
   await user.save();
 
   mailer.sendPasswordResetEmail(user.email, rawToken).catch((err) => {
-    console.error('Failed to send password reset email:', err.body ?? err);
+    logger.error('Failed to send password reset email', { error: err.body ?? err.message });
   });
 }
 

@@ -15,10 +15,11 @@ Everything built on the client: architecture, page-by-page behavior, real-time w
 client/src/
 ├── app/            App.jsx (providers), routes.jsx (route table + socket lifecycle)
 ├── components/
-│   ├── auth/       Modal, LoginModal, RegisterModal, ForgotPasswordModal, GoogleSignInButton
+│   ├── auth/       Modal, LoginModal, RegisterModal, ForgotPasswordModal, GoogleSignInButton, TurnstileWidget
 │   ├── collaboration/   RichTextEditor, TurnComposer, EntryList, CompletionControls,
 │   │                    KeywordChips, ChatPanel, CollaborationCard, QuickMatchPanel, InvitePanel
 │   ├── layout/     AppShell, SidebarNav, AdminShell
+│   ├── ErrorBoundary.jsx   app-wide render-error fallback
 │   ├── PenMark.jsx     logo mark
 │   └── Skeleton.jsx    loading-state placeholders
 ├── context/        AuthContext.jsx
@@ -30,6 +31,10 @@ client/src/
 ```
 
 **Routing** (`app/routes.jsx`): `/`, `/verify-email/:token`, `/collaborations`, `/collaborations/:id`, `/leaderboard`, `/invite/:code`, `/reset-password/:token`, `/account`, `/privacy`, `/terms`, `/admin`, `/admin/users`, and a `*` catch-all → `NotFoundPage`. The same file owns the Socket.IO connection lifecycle: `socket.connect()`/`disconnect()` are tied to `isAuthenticated`, and it globally listens for `matchmaking:matched`/`invite:redeemed` to navigate straight into the new collaboration — these two events can fire while the user is sitting on any page, not just a collaboration-specific one, so the listener lives at the routing level rather than in a page component.
+
+**Code-split per route:** every page is a `lazy(() => import(...))` rather than a static import, wrapped in one `<Suspense fallback={<RouteFallback />}>` around the whole `<Routes>` tree. Pages only have named exports (`export function HomePage()`, not `export default`), so each dynamic import is remapped to the default-export shape `React.lazy` requires via a small `namedLazy` helper, rather than adding a default export to every page file just for this. This is what took the production build's main entry chunk from ~1.2MB down to ~216KB — Tiptap (`CollaborationPage`), jsPDF/html2canvas (`exportCollaborationPdf`), and Framer Motion (`HomePage`) now only load when their page is actually visited, instead of upfront on every load regardless of which page a user lands on.
+
+**Error boundary:** `App.jsx` wraps everything inside `BrowserRouter` in one `ErrorBoundary` (a class component — `componentDidCatch`/`getDerivedStateFromError` have no hook equivalent). An unexpected render error anywhere now shows a friendly "Something went wrong" screen with a reload link instead of a blank white page; the underlying error is still logged to the console (`componentDidCatch`) for debugging, just not shown to the user.
 
 ---
 
@@ -60,6 +65,8 @@ client/src/
 **Modals:** `LoginModal`, `RegisterModal`, `ForgotPasswordModal` share one `Modal` wrapper (backdrop, centered card, `Escape`-free close-on-backdrop-click, `aria-label="Close"` on the × button). `LoginModal` accepts an optional `onForgotPassword` callback so the pages that render it (`HomePage`, `InvitePage`) can wire "Forgot password?" into their own modal-switching state.
 
 **Google Sign-In** (`GoogleSignInButton`): renders Google's own button via Google Identity Services (a `<script>` tag in `index.html`, no npm wrapper). Polls for `window.google.accounts.id` being ready (the script loads `async defer`) rather than checking once on mount. The button's width is measured from its own (responsive) container rather than hardcoded, so it doesn't overflow narrow phone screens (see bug log).
+
+**CAPTCHA** (`TurnstileWidget`): same pattern as `GoogleSignInButton` — Cloudflare's widget script is a `<script>` tag in `index.html`, no npm wrapper, and the component polls for `window.turnstile` before calling `window.turnstile.render(...)`. Rendered only in `RegisterModal`, between the password field and the submit button; the token it produces (`onVerify`) is held in `captchaToken` state and sent to `POST /auth/register` alongside the rest of the form — the submit button stays disabled until a token exists, the same "disabled until valid" pattern already used elsewhere on this form. `onExpire`/`onError` are wrapped in `useCallback` in `RegisterModal` before being passed down — without that, a new inline arrow function on every keystroke in the *other* fields (email, password) would change the widget's effect dependencies and re-render/reset it while the user is still typing, which was caught before it shipped rather than after.
 
 ---
 
@@ -203,5 +210,3 @@ Semantic landmarks (`<header>`, `<main>`, `<nav>`) were already in place. An exp
 
 - **No automated frontend test coverage** — no Vitest/React Testing Library, no Playwright. Every behavior described in this document has been verified by manual reasoning, live curl/socket scripts during development, or production-build checks — not by a repeatable test suite. This is the single biggest gap on the frontend side.
 - **No real accessibility audit** beyond the icon-only-control pass in §14 — contrast ratios, keyboard tab order, and screen-reader flow through multi-step forms haven't been systematically checked.
-- **Large single JS bundle** — the production build warns about a >1MB main chunk (Tiptap + jsPDF + framer-motion all load upfront). Code-splitting (`React.lazy` per route, at minimum) would help but hasn't been done.
-- **No offline/error-boundary handling** for unexpected render errors — a thrown error in a component tree currently has no `ErrorBoundary` catching it gracefully.

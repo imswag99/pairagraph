@@ -3,6 +3,7 @@ import { User } from '../authentication/auth.model.js';
 import { Collaboration } from '../collaboration/collaboration.model.js';
 import { ApiError } from '../../utils/ApiError.js';
 import { mailer } from '../../utils/mailer.js';
+import { logger } from '../../utils/logger.js';
 
 const REASONS = ['harassment', 'spam', 'inappropriate_content', 'other'];
 
@@ -56,7 +57,7 @@ export async function reportUser(reporterId, collaborationId, { reason, details 
         reason,
         details: trimmedDetails,
       })
-      .catch((err) => console.error('Failed to send report notification email:', err.body ?? err));
+      .catch((err) => logger.error('Failed to send report notification email', { error: err.body ?? err.message }));
   }
 }
 

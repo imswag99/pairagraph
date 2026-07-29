@@ -4,6 +4,7 @@ import assert from 'node:assert/strict';
 import mongoose from 'mongoose';
 import { User } from './auth.model.js';
 import { mailer } from '../../utils/mailer.js';
+import { turnstile } from '../../utils/turnstile.js';
 import * as authService from './auth.service.js';
 
 const RUN_ID = `auth-test-${Date.now()}`;
@@ -27,6 +28,7 @@ beforeEach(() => {
   mock.method(mailer, 'sendVerificationEmail', async () => {});
   mock.method(mailer, 'sendPasswordResetEmail', async () => {});
   mock.method(mailer, 'sendGoogleAccountNoticeEmail', async () => {});
+  mock.method(turnstile, 'verifyToken', async () => true);
 });
 
 test('register creates a user and emails a verification link, without leaking the password hash', async () => {
@@ -40,6 +42,23 @@ test('register creates a user and emails a verification link, without leaking th
   assert.equal(user.isEmailVerified, false);
   assert.equal(mailer.sendVerificationEmail.mock.calls.length, 1);
   assert.ok(!('passwordHash' in user));
+});
+
+test('register rejects when CAPTCHA verification fails', async () => {
+  mock.method(turnstile, 'verifyToken', async () => false);
+
+  await assert.rejects(
+    () =>
+      authService.register({
+        email: email('captcha-fail'),
+        password: 'correct-horse-1',
+        displayName: 'Captcha Fail',
+      }),
+    (err) => err.statusCode === 400
+  );
+
+  const stored = await User.findOne({ email: email('captcha-fail') });
+  assert.equal(stored, null);
 });
 
 test('register rejects a duplicate email', async () => {
