@@ -152,11 +152,13 @@ test('listReports returns reports with reporter/reportedUser populated', async (
   assert.equal(report.status, 'open');
 });
 
-test('markReportReviewed flips status to reviewed', async () => {
+test('markReportReviewed flips status to reviewed and keeps reporter/reportedUser populated', async () => {
   const [report] = await moderationService.listReports();
 
   const updated = await moderationService.markReportReviewed(report._id);
   assert.equal(updated.status, 'reviewed');
+  assert.equal(updated.reporter.displayName, report.reporter.displayName);
+  assert.equal(updated.reportedUser.displayName, report.reportedUser.displayName);
 });
 
 test('markReportReviewed rejects a bogus id', async () => {

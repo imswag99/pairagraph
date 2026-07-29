@@ -92,7 +92,9 @@ export async function listReports() {
 }
 
 export async function markReportReviewed(reportId) {
-  const report = await Report.findByIdAndUpdate(reportId, { status: 'reviewed' }, { new: true });
+  const report = await Report.findByIdAndUpdate(reportId, { status: 'reviewed' }, { new: true })
+    .populate('reporter', 'displayName email')
+    .populate('reportedUser', 'displayName email');
   if (!report) {
     throw new ApiError(404, 'Report not found');
   }
