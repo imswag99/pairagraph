@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Navigate, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext.jsx';
 import { AppShell } from '../components/layout/AppShell.jsx';
+import { AdminShell } from '../components/layout/AdminShell.jsx';
 import { moderationService } from '../services/moderationService.js';
 
 const inputClasses =
@@ -222,13 +223,16 @@ export function AccountPage() {
   if (isLoading) return null;
   if (!currentUser) return <Navigate to="/" replace />;
 
+  const isAdmin = currentUser.role === 'admin';
+  const Shell = isAdmin ? AdminShell : AppShell;
+
   return (
-    <AppShell currentUser={currentUser} logout={logout}>
+    <Shell currentUser={currentUser} logout={logout}>
       <h1 className="font-serif text-2xl text-charcoal">Account</h1>
       <ProfileSection currentUser={currentUser} />
       <PasswordSection currentUser={currentUser} />
-      <BlockedUsersSection />
+      {!isAdmin && <BlockedUsersSection />}
       <DangerZoneSection />
-    </AppShell>
+    </Shell>
   );
 }

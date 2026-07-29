@@ -81,6 +81,8 @@ client/src/
 
 **`AdminUsersPage`**: every user from `GET /admin/users` (already merged server-side with an open-report count), each row showing an open-report badge when >0, Banned/Deleted badges, and — unless the row is the admin's own account, another admin, or already deleted — a Ban/Unban toggle and a Delete action (two-step inline confirm, the same "Leave?"-style pattern `CollaborationPage` already uses for Block/Leave rather than a modal). Self and other-admin rows render with no action buttons at all instead of disabling them, since there's nothing a click there could ever legitimately do.
 
+**`AccountPage`** (§10) is the third page in this path, not a separate one — `AdminShell`'s header links to `/account` the same as `AppShell`'s does, so it has to render inside `AdminShell` for an admin too, or the one working nav link out of the admin panel would drop them right back into the writer chrome it exists to avoid.
+
 ---
 
 ## 6. The writing loop (`CollaborationPage`)
@@ -127,7 +129,9 @@ Both use the shared `CollaborationCard` (also used standalone nowhere else now �
 
 ## 10. Account management (`AccountPage`)
 
-Four independent sections, each with its own local loading/error/success state: **Profile** (display name), **Password** (hidden behind a "this account uses Google, no password set" message if `hasPassword` is false — the on-ramp being "Forgot password" from the login screen, which lets a Google-only account set one), **Blocked users** (fetched via `GET /moderation/blocks` on mount, each row a display name + "Unblock" button that calls `DELETE /moderation/blocks/:userId` and removes the row from local state directly rather than refetching), and a **Danger zone** (delete account, gated behind typing the literal word "delete" into a confirmation input before the button enables).
+One shared page for both writer and admin accounts, but the shell and one section depend on `currentUser.role`: it picks `AdminShell` over `AppShell` for an admin (§5) — otherwise the "Account" link in `AdminShell`'s own header dropped an admin straight into the writer chrome, defeating the point of having a separate admin shell — and skips the **Blocked users** section entirely for an admin, since an admin can never participate in a collaboration (§5) and so can never have blocked anyone; the section would only ever show "You haven't blocked anyone," pure clutter.
+
+Sections, each with its own local loading/error/success state: **Profile** (display name), **Password** (hidden behind a "this account uses Google, no password set" message if `hasPassword` is false — the on-ramp being "Forgot password" from the login screen, which lets a Google-only account set one), **Blocked users** (writer accounts only — fetched via `GET /moderation/blocks` on mount, each row a display name + "Unblock" button that calls `DELETE /moderation/blocks/:userId` and removes the row from local state directly rather than refetching), and a **Danger zone** (delete account, gated behind typing the literal word "delete" into a confirmation input before the button enables — unchanged for admin accounts, self-deletion here is unrelated to the admin panel's separate "can't delete another admin/yourself" guard, §10 of `BACKEND.md`).
 
 ---
 
@@ -191,6 +195,7 @@ Semantic landmarks (`<header>`, `<main>`, `<nav>`) were already in place. An exp
 | 12 | The dashboard hero's only interactive element scrolled to content already visible one glance below it | A "Start writing" button was added as a CTA without checking whether it was actually needed, given the panels it targeted were already near the top of the page | Removed the button; replaced with actual atmosphere (staggered entrance motion, ambient gradient drift, a rotating inspiration word) — motion earns the hero's place instead of a fake action |
 | 13 | An unused `constants/colors.js` file existed with zero imports anywhere in the codebase | Left over from an earlier pass, likely originally intended for the PDF export before that ended up not needing raw hex values | Deleted; confirmed via full-codebase grep that nothing referenced it and the build was unaffected |
 | 14 | An admin account saw the exact same nav/dashboard as a writer, plus the admin report list's "View collaboration" link 403'd whenever the admin wasn't a participant in the reported collaboration | `AdminReportsPage` reused `AppShell`/`SidebarNav` (the writer chrome) and linked straight to the participant-gated `/collaborations/:id` — nothing about the frontend routing treated an admin account differently at all | Gave admin its own `AdminShell` + redirect-on-login (§5), and replaced the broken link with an inline, admin-only, no-participant-check preview fetched from a new backend endpoint |
+| 15 | Clicking "Account" from the new `AdminShell` dropped the admin straight back into the regular writer chrome, defeating the point of a separate admin path; the account page also showed a "Blocked users" section that could never contain anything for an admin | `AccountPage` unconditionally rendered `AppShell` and unconditionally rendered `BlockedUsersSection`, with no `role` check at all — an oversight in the same admin-separation pass that missed this one shared page | `AccountPage` now picks `AdminShell` vs `AppShell` based on `currentUser.role`, and skips `BlockedUsersSection` entirely for an admin |
 
 ---
 
