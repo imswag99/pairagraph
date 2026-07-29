@@ -56,7 +56,7 @@ cp server/.env.example server/.env
 cp client/.env.example client/.env
 ```
 
-`server/.env` needs a MongoDB URI, JWT secrets, a Brevo API key + verified sender address (for verification/reset emails), a Google OAuth client ID, optionally a Gemini API key (falls back to a local keyword pool if omitted), and optionally a Cloudflare Turnstile secret key (`CAPTCHA_SECRET_KEY` — registration's CAPTCHA check is bypassed entirely if this is left unset, same as the Gemini key). `client/.env` needs the API URL, the same Google OAuth client ID, and the matching Turnstile site key (`VITE_CAPTCHA_SITE_KEY`).
+`server/.env` needs a MongoDB URI, JWT secrets, a Brevo API key + verified sender address (for verification/reset emails), a Google OAuth client ID, optionally a Gemini API key (falls back to a local keyword pool if omitted), optionally a Cloudflare Turnstile secret key (`CAPTCHA_SECRET_KEY` — registration's CAPTCHA check is bypassed entirely if this is left unset, same as the Gemini key), and optionally a Sentry DSN (`SENTRY_DSN` — error tracking is skipped entirely if unset). `client/.env` needs the API URL, the same Google OAuth client ID, the matching Turnstile site key (`VITE_CAPTCHA_SITE_KEY`), and optionally a separate Sentry DSN for the frontend project (`VITE_SENTRY_DSN`).
 
 ### 3. Run both dev servers
 

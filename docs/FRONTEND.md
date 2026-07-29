@@ -6,7 +6,7 @@ Everything built on the client: architecture, page-by-page behavior, real-time w
 
 ## 1. Architecture at a glance
 
-**Stack:** React 18, Vite, React Router v6, Tailwind CSS, Tiptap (rich text), Framer Motion, `socket.io-client`, `jsPDF`.
+**Stack:** React 18, Vite, React Router v6, Tailwind CSS, Tiptap (rich text), Framer Motion, `socket.io-client`, `jsPDF`, Cloudflare Turnstile (CAPTCHA), Sentry (`@sentry/react`, error tracking only).
 
 **State management:** plain React Context + `useState`/`useEffect` — no Redux, Zustand, or React Query, by design. `AuthContext` is the only app-wide context; everything else is local component state plus a thin `services/*.js` layer of one-line `fetch` wrappers per domain (`authService`, `collaborationService`, `chatService`, `inviteService`, `matchmakingService`, `leaderboardService`), all routed through a single `services/api.js` that adds `credentials: 'include'` and unwraps `{success, message, data}` into a thrown `Error` on failure.
 
@@ -35,6 +35,8 @@ client/src/
 **Code-split per route:** every page is a `lazy(() => import(...))` rather than a static import, wrapped in one `<Suspense fallback={<RouteFallback />}>` around the whole `<Routes>` tree. Pages only have named exports (`export function HomePage()`, not `export default`), so each dynamic import is remapped to the default-export shape `React.lazy` requires via a small `namedLazy` helper, rather than adding a default export to every page file just for this. This is what took the production build's main entry chunk from ~1.2MB down to ~216KB — Tiptap (`CollaborationPage`), jsPDF/html2canvas (`exportCollaborationPdf`), and Framer Motion (`HomePage`) now only load when their page is actually visited, instead of upfront on every load regardless of which page a user lands on.
 
 **Error boundary:** `App.jsx` wraps everything inside `BrowserRouter` in one `ErrorBoundary` (a class component — `componentDidCatch`/`getDerivedStateFromError` have no hook equivalent). An unexpected render error anywhere now shows a friendly "Something went wrong" screen with a reload link instead of a blank white page; the underlying error is still logged to the console (`componentDidCatch`) for debugging, just not shown to the user.
+
+**Error tracking (Sentry):** `main.jsx` calls `Sentry.init({ dsn: import.meta.env.VITE_SENTRY_DSN, tracesSampleRate: 0 })` before the app renders — `tracesSampleRate: 0` and no `browserTracingIntegration` added means this stays strictly error tracking, not performance monitoring (a separate product/quota this project isn't using). No-ops entirely if `VITE_SENTRY_DSN` is unset, matching every other optional integration in this project. `ErrorBoundary`'s `componentDidCatch` calls `Sentry.captureException(error, { contexts: { react: { componentStack: info.componentStack } } })` alongside its existing `console.error`, so a render error now reaches Sentry too, not just the browser console nobody's watching. Sentry's default browser integrations also pick up unhandled promise rejections and global `window.onerror` events outside the React tree automatically, with no extra code — that coverage came for free just from calling `init()`.
 
 ---
 

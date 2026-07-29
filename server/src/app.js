@@ -1,3 +1,4 @@
+import * as Sentry from '@sentry/node';
 import express from 'express';
 import cors from 'cors';
 import cookieParser from 'cookie-parser';
@@ -66,6 +67,16 @@ export function createApp() {
   app.use('/api/leaderboard', leaderboardRoutes);
   app.use('/api/moderation', moderationRoutes);
   app.use('/api/admin', adminRoutes);
+
+  // Only reports genuinely unexpected errors, same isOperational split
+  // errorHandler already makes — an ApiError (bad password, not found, a
+  // failed CAPTCHA) is expected, everyday traffic, not an incident worth an
+  // alert, and reporting it anyway would just burn quota on non-bugs.
+  Sentry.setupExpressErrorHandler(app, {
+    shouldHandleError(error) {
+      return !error.isOperational;
+    },
+  });
 
   app.use(errorHandler);
 

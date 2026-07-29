@@ -1,4 +1,7 @@
 import 'dotenv/config';
+// Must run after dotenv (needs process.env.SENTRY_DSN populated) but before
+// anything else, so Sentry is capturing from the very start of the process.
+import './instrument.js';
 import { createServer } from 'node:http';
 import { createApp } from './app.js';
 import { connectDB } from './config/db.js';
