@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Modal } from './Modal.jsx';
 import { GoogleSignInButton } from './GoogleSignInButton.jsx';
@@ -17,6 +17,7 @@ export function RegisterModal({ isOpen, onClose }) {
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const turnstileRef = useRef(null);
 
   // Stable across re-renders (e.g. every keystroke in the fields above) so
   // TurnstileWidget's effect doesn't re-run and reset the widget mid-form-fill.
@@ -32,6 +33,13 @@ export function RegisterModal({ isOpen, onClose }) {
       setMessage(successMessage);
     } catch (err) {
       setError(err.message);
+      // Turnstile tokens are single-use — a failure here for *any* reason
+      // (duplicate email, weak password, or the CAPTCHA itself) has already
+      // spent this token against Cloudflare, so retrying without a fresh one
+      // would just fail CAPTCHA verification a second time regardless of
+      // whether the underlying issue was fixed.
+      setCaptchaToken('');
+      turnstileRef.current?.reset();
     } finally {
       setIsSubmitting(false);
     }
@@ -66,6 +74,7 @@ export function RegisterModal({ isOpen, onClose }) {
           className={inputClasses}
         />
         <TurnstileWidget
+          ref={turnstileRef}
           onVerify={setCaptchaToken}
           onExpire={handleCaptchaReset}
           onError={handleCaptchaReset}
