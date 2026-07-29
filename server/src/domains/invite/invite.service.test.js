@@ -113,3 +113,15 @@ test('getMine lists invites created by the user', async () => {
   const mine = await inviteService.getMine(creator._id);
   assert.ok(mine.some((i) => i.id.toString() === invite._id.toString()));
 });
+
+test('redeemInvite rejects a redeemer blocked by the creator', async () => {
+  await User.findByIdAndUpdate(creator._id, { $addToSet: { blockedUsers: redeemer._id } });
+  const invite = await inviteService.createInvite(creator._id, 'story');
+
+  await assert.rejects(
+    () => inviteService.redeemInvite(redeemer._id, invite.code),
+    (err) => err.statusCode === 403
+  );
+
+  await User.findByIdAndUpdate(creator._id, { $pull: { blockedUsers: redeemer._id } });
+});

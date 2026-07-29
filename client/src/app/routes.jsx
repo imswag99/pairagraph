@@ -10,6 +10,9 @@ import { LeaderboardPage } from '../pages/LeaderboardPage.jsx';
 import { InvitePage } from '../pages/InvitePage.jsx';
 import { ResetPasswordPage } from '../pages/ResetPasswordPage.jsx';
 import { AccountPage } from '../pages/AccountPage.jsx';
+import { PrivacyPolicyPage } from '../pages/PrivacyPolicyPage.jsx';
+import { TermsOfServicePage } from '../pages/TermsOfServicePage.jsx';
+import { AdminReportsPage } from '../pages/AdminReportsPage.jsx';
 import { NotFoundPage } from '../pages/NotFoundPage.jsx';
 
 export function AppRoutes() {
@@ -45,6 +48,9 @@ export function AppRoutes() {
       <Route path="/invite/:code" element={<InvitePage />} />
       <Route path="/reset-password/:token" element={<ResetPasswordPage />} />
       <Route path="/account" element={<AccountPage />} />
+      <Route path="/privacy" element={<PrivacyPolicyPage />} />
+      <Route path="/terms" element={<TermsOfServicePage />} />
+      <Route path="/admin" element={<AdminReportsPage />} />
       <Route path="*" element={<NotFoundPage />} />
     </Routes>
   );

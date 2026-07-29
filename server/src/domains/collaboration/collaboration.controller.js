@@ -40,3 +40,8 @@ export const respondToCompletionHandler = asyncHandler(async (req, res) => {
   );
   res.json({ success: true, data: { collaboration } });
 });
+
+export const leaveHandler = asyncHandler(async (req, res) => {
+  const collaboration = await collaborationService.leave(req.user.id, req.params.id);
+  res.json({ success: true, data: { collaboration } });
+});

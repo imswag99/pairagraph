@@ -8,6 +8,7 @@ import matchmakingRoutes from './domains/matchmaking/matchmaking.routes.js';
 import inviteRoutes from './domains/invite/invite.routes.js';
 import chatRoutes from './domains/chat/chat.routes.js';
 import leaderboardRoutes from './domains/leaderboard/leaderboard.routes.js';
+import moderationRoutes from './domains/moderation/moderation.routes.js';
 import { errorHandler } from './middleware/errorHandler.js';
 
 function rateLimitHandler(req, res) {
@@ -62,6 +63,7 @@ export function createApp() {
   app.use('/api/invites', inviteRoutes);
   app.use('/api/collaborations/:collaborationId/chat', chatRoutes);
   app.use('/api/leaderboard', leaderboardRoutes);
+  app.use('/api/moderation', moderationRoutes);
 
   app.use(errorHandler);
 

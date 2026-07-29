@@ -26,7 +26,7 @@ export function CollaborationsPage() {
   useEffect(() => {
     if (!currentUser) return;
     collaborationService
-      .getMine({ status: 'completed,private', page: 1, limit: PAST_PAGE_SIZE })
+      .getMine({ status: 'completed,private,left', page: 1, limit: PAST_PAGE_SIZE })
       .then(({ data }) => {
         setPastCollaborations(data.collaborations);
         setPastHasMore(data.hasMore);
@@ -39,7 +39,7 @@ export function CollaborationsPage() {
     try {
       const nextPage = pastPage + 1;
       const { data } = await collaborationService.getMine({
-        status: 'completed,private',
+        status: 'completed,private,left',
         page: nextPage,
         limit: PAST_PAGE_SIZE,
       });

@@ -162,3 +162,23 @@ export async function respondToCompletion(userId, collaborationId, approve) {
   broadcastUpdate(collaboration);
   return collaboration;
 }
+
+// Freezes the collaboration for both participants — no more turns, no more
+// chat (see chat.service.js) — without deleting anything either side wrote.
+// Distinct from a mutually-declined completion ('private') so the UI can
+// tell the two apart and say who actually left.
+export async function leave(userId, collaborationId) {
+  const collaboration = await findAccessible(userId, collaborationId);
+
+  if (collaboration.status !== 'in_progress') {
+    throw new ApiError(409, 'This collaboration is no longer in progress');
+  }
+
+  collaboration.status = 'left';
+  collaboration.leftBy = userId;
+  await collaboration.save();
+
+  await collaboration.populate([PARTICIPANT_POPULATE, TURN_OWNER_POPULATE, ENTRY_AUTHOR_POPULATE]);
+  broadcastUpdate(collaboration);
+  return collaboration;
+}

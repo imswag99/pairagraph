@@ -2,13 +2,13 @@
 
 A single running list of what's deliberately left unfinished, in rough priority order. Check here before starting new work — some of these compound with new features (e.g. anything touching auth or CORS should re-check items 1-2 first).
 
-Last reviewed: 2026-07-28, after migrating email from SendGrid to Brevo ahead of SendGrid's trial expiration.
+Last reviewed: 2026-07-29, after shipping the admin reports panel as a follow-up to the report/block MVP.
 
 ## Deployment-specific (only apply once live)
 
 1. **Render free-tier cold starts.** The instance sleeps after ~15 min idle; the next request takes 30-60s to wake it. During that window, login can hang and Socket.IO connections drop instead of erroring cleanly. No code fix without paying for an always-on instance — consider a "waking up the server…" loading message if this becomes a recurring complaint.
 2. **CORS is locked to a single origin** (`CLIENT_URL` env var, currently the production Vercel URL). If a branch/PR is ever deployed, Vercel's auto-generated preview URL won't match and will be silently CORS-blocked. Fine today since only the main URL is used; revisit if preview deploys start getting used.
-3. **Render blocks outbound raw SMTP connections.** Discovered when both Gmail's and SendGrid's SMTP servers timed out identically (`ETIMEDOUT` on `CONN`) from Render, despite working fine locally. Fixed by switching email sending to an HTTP API instead of SMTP (see `BACKEND.md` §13, bugs #14 and #16) — but worth remembering if any future integration is tempted to use raw SMTP/sockets on Render: prefer an HTTPS-based API instead. **Rules out any SMTP relay (Brevo's included) as a fallback** — only HTTP APIs work here.
+3. **Render blocks outbound raw SMTP connections.** Discovered when both Gmail's and SendGrid's SMTP servers timed out identically (`ETIMEDOUT` on `CONN`) from Render, despite working fine locally. Fixed by switching email sending to an HTTP API instead of SMTP (see `BACKEND.md` §14, bugs #14 and #16) — but worth remembering if any future integration is tempted to use raw SMTP/sockets on Render: prefer an HTTPS-based API instead. **Rules out any SMTP relay (Brevo's included) as a fallback** — only HTTP APIs work here.
 4. **Env vars now live in three places** with no sync: local `.env` files, Render dashboard, Vercel dashboard. If any secret rotates (e.g. Gemini key, Brevo API key), it has to be updated in all three manually.
 5. **No staging environment.** Every push to `main` deploys straight to production on both platforms, gated only by the backend test suite in CI (and only if CI finishes before the platform's own auto-deploy kicks off).
 6. **Google OAuth origins are manually registered** in Google Cloud Console. If the Vercel URL ever changes (custom domain, project rename), Google Sign-In will break with `origin_mismatch` until the new origin is added there.
@@ -23,7 +23,7 @@ Last reviewed: 2026-07-28, after migrating email from SendGrid to Brevo ahead of
 
 ## Testing / observability
 
-8. **No frontend automated test coverage** — no Vitest/RTL, no Playwright. Backend has 44 passing tests in CI; frontend has none. The single biggest gap on the frontend side.
+8. **No frontend automated test coverage** — no Vitest/RTL, no Playwright. Backend has 66 passing tests in CI; frontend has none. The single biggest gap on the frontend side.
 9. **No monitoring or error tracking.** If something breaks in production, there's no alert — only a user report. Free tiers exist (e.g. Sentry) but adding one is a new external service, not something to add without asking given the no-added-cost constraint.
 10. **No structured logging** — raw `console.log`/`console.error` in a handful of backend places.
 11. **No real accessibility audit** beyond a manual icon-only-control pass — contrast ratios, keyboard tab order, and screen-reader flow through multi-step forms haven't been systematically checked.

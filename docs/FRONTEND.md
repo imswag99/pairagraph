@@ -44,7 +44,10 @@ client/src/
 | `/leaderboard` | `LeaderboardPage` | Week/all-time ranked table. See §8. |
 | `/invite/:code` | `InvitePage` | Redeems the invite if logged in; otherwise shows a landing prompt with login/register modals. |
 | `/reset-password/:token` | `ResetPasswordPage` | New-password form, reached only via the emailed link. |
-| `/account` | `AccountPage` | Change display name, change password, delete account. See §9. |
+| `/account` | `AccountPage` | Change display name, change password, blocked users, delete account. See §9. |
+| `/privacy` | `PrivacyPolicyPage` | Static page, linked from the landing footer, the logged-in app shell footer, and the signup disclaimer. |
+| `/terms` | `TermsOfServicePage` | Same linking pattern as Privacy. |
+| `/admin` | `AdminReportsPage` | Gated to `currentUser.role === 'admin'` (redirects home otherwise) — lists filed reports with a "Mark reviewed" action. See §9. |
 | `*` | `NotFoundPage` | Catch-all for any unmatched path. |
 
 ---
@@ -63,7 +66,7 @@ client/src/
 
 `AppShell` (header + `SidebarNav` + `<main>`) is the shared chrome for every authenticated page except `CollaborationPage` (which has its own distinct header — back link + partner name — since it's a focused writing view, not part of the dashboard family).
 
-`SidebarNav` is a horizontal tab row on narrow screens, a vertical sidebar at `lg:` and up (matches the responsive pattern used elsewhere). It fetches `GET /collaborations/turn-count` on mount and shows a small pill badge on the "Collaborations" link when it's greater than zero — a lightweight, purpose-built count endpoint rather than fetching full collaboration data just to derive a number.
+`SidebarNav` is a horizontal tab row on narrow screens, a vertical sidebar at `lg:` and up (matches the responsive pattern used elsewhere). It fetches `GET /collaborations/turn-count` on mount and shows a small pill badge on the "Collaborations" link when it's greater than zero — a lightweight, purpose-built count endpoint rather than fetching full collaboration data just to derive a number. An "Admin" link renders conditionally when `currentUser?.role === 'admin'` — invisible to every other user, the only nav item that isn't unconditional.
 
 ---
 
@@ -76,6 +79,8 @@ Layout: a two-column grid at `lg:` and up — main content (instructions, entrie
 - **`CompletionControls`** is a three-state component driven entirely by `self.hasApproved`/`other.hasApproved`: "suggest wrapping up" → "waiting on the other person" → "they want to wrap up, agree or decline."
 - **Real-time:** the page listens for `collaboration:updated` (turn submitted or completion responded to, from either side) and replaces its local state wholesale — no polling, no manual refresh.
 - **PDF export** (§10) appears as a button next to the status label, only once `status === 'completed'`.
+- **Report/Block/Leave:** next to the partner's name in the header, a "Report" button opens `ReportModal` (reason dropdown + optional details, mirrors `ForgotPasswordModal`'s state pattern); "Block" and "Leave" are both two-step inline confirms ("Block?"/"Leave?" + Yes/Cancel) rather than modals, since they're single low-ambiguity actions. Blocking doesn't touch the current collaboration (only affects future matching, `BACKEND.md` §9) — the page's own state is untouched. Leaving does: the response replaces `collaboration` the same way submitting a turn does, so the page immediately reflects the frozen `'left'` status for the leaver, and the other participant sees it live via the existing `collaboration:updated` socket listener with zero extra wiring. Only shown while `status === 'in_progress'` — once left, there's nothing left to leave.
+- **After leaving:** the generic "This collaboration is {status}." fallback text is skipped for `status === 'left'` in favor of a specific message using the new `leftBy` field — "You left this collaboration." or "{name} left this collaboration." depending on the viewer, since the generic phrasing didn't read naturally for this one case. `ChatPanel` receives a new `isActive={status === 'in_progress'}` prop and disables its send form (replacing it with "This conversation has ended.") once false — reading old messages stays available either way, only new sends are blocked, matching the backend's own read/write split.
 
 ---
 
@@ -109,7 +114,9 @@ Both use the shared `CollaborationCard` (also used standalone nowhere else now �
 
 ## 9. Account management (`AccountPage`)
 
-Three independent sections, each with its own local loading/error/success state: **Profile** (display name), **Password** (hidden behind a "this account uses Google, no password set" message if `hasPassword` is false — the on-ramp being "Forgot password" from the login screen, which lets a Google-only account set one), and a **Danger zone** (delete account, gated behind typing the literal word "delete" into a confirmation input before the button enables).
+Four independent sections, each with its own local loading/error/success state: **Profile** (display name), **Password** (hidden behind a "this account uses Google, no password set" message if `hasPassword` is false — the on-ramp being "Forgot password" from the login screen, which lets a Google-only account set one), **Blocked users** (fetched via `GET /moderation/blocks` on mount, each row a display name + "Unblock" button that calls `DELETE /moderation/blocks/:userId` and removes the row from local state directly rather than refetching), and a **Danger zone** (delete account, gated behind typing the literal word "delete" into a confirmation input before the button enables).
+
+**`AdminReportsPage`** (admin-only, see §2, §4): gates the same way `AccountPage` gates on `currentUser` — `if (currentUser?.role !== 'admin') return <Navigate to="/" replace />`. Fetches `GET /moderation/reports` on mount and renders each as a card: reason, reporter/reported-user name + email, optional details text, a link straight into `/collaborations/:id` for context, and a "Mark reviewed" button that calls `PATCH /moderation/reports/:id` and swaps just that one card's data in local state (`prev.map(...)`) rather than refetching the whole list.
 
 ---
 

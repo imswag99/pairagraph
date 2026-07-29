@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Link } from 'react-router-dom';
 import { Modal } from './Modal.jsx';
 import { GoogleSignInButton } from './GoogleSignInButton.jsx';
 import { useAuth } from '../../context/AuthContext.jsx';
@@ -67,6 +68,17 @@ export function RegisterModal({ isOpen, onClose }) {
         >
           {isSubmitting ? 'Creating account…' : 'Create account'}
         </button>
+        <p className="text-center text-xs text-charcoal/40">
+          By signing up, you agree to Pairagraph's{' '}
+          <Link to="/terms" className="underline decoration-charcoal/20 underline-offset-4 hover:text-charcoal/60">
+            Terms
+          </Link>{' '}
+          and{' '}
+          <Link to="/privacy" className="underline decoration-charcoal/20 underline-offset-4 hover:text-charcoal/60">
+            Privacy Policy
+          </Link>
+          .
+        </p>
       </form>
       <div className="my-5 flex items-center gap-3 text-xs uppercase tracking-wide text-charcoal/35">
         <div className="h-px flex-1 bg-charcoal/10" />

@@ -28,7 +28,7 @@ function formatDateDivider(dateString) {
   return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
 }
 
-export function ChatPanel({ collaborationId, currentUserId }) {
+export function ChatPanel({ collaborationId, currentUserId, isActive = true }) {
   const [isOpen, setIsOpen] = useState(false);
   const [messages, setMessages] = useState(null);
   const [hasMore, setHasMore] = useState(false);
@@ -134,13 +134,13 @@ export function ChatPanel({ collaborationId, currentUserId }) {
     // Below lg it's a collapsible accordion (no room for a sidebar on
     // narrow screens); at lg+ it becomes a persistent right-hand sidebar
     // that sticks in place while the main column scrolls.
-    <div className="flex flex-col rounded-2xl border border-charcoal/10 bg-white/50 shadow-soft lg:sticky lg:top-12 lg:h-[calc(100vh-6rem)]">
+    <div className="flex flex-col overflow-hidden rounded-2xl border border-charcoal/10 bg-white/50 shadow-soft lg:sticky lg:top-12 lg:h-[calc(100vh-11rem)]">
       <button
         type="button"
         onClick={() => setIsOpen((open) => !open)}
         aria-expanded={isOpen}
         aria-controls="chat-panel-content"
-        className="flex items-center justify-between px-5 py-3 text-sm font-medium text-charcoal/70 lg:pointer-events-none"
+        className="flex shrink-0 items-center justify-between px-5 py-3 text-sm font-medium text-charcoal/70 lg:pointer-events-none"
       >
         <span>Chat</span>
         <span
@@ -157,7 +157,7 @@ export function ChatPanel({ collaborationId, currentUserId }) {
           isOpen ? 'flex' : 'hidden'
         } flex-col gap-3 border-t border-charcoal/10 px-5 py-4 lg:flex lg:min-h-0 lg:flex-1`}
       >
-        <div ref={listRef} className="flex max-h-64 flex-col gap-2 overflow-y-auto lg:max-h-none lg:flex-1">
+        <div ref={listRef} className="flex max-h-64 flex-col gap-2 overflow-y-auto lg:max-h-none lg:min-h-0 lg:flex-1">
           {messages === null ? (
             <>
               <ChatMessageSkeleton align="start" />
@@ -216,21 +216,25 @@ export function ChatPanel({ collaborationId, currentUserId }) {
 
         {isOtherTyping && <p className="text-xs italic text-charcoal/40">Typing…</p>}
 
-        <form onSubmit={handleSend} className="flex items-center gap-2">
-          <input
-            value={draft}
-            onChange={handleDraftChange}
-            placeholder="Say something…"
-            className="min-w-0 flex-1 rounded-lg border border-charcoal/15 bg-white/70 px-3 py-2 text-sm text-charcoal placeholder:text-charcoal/40 focus:border-indigo focus:outline-none focus:ring-2 focus:ring-indigo/15"
-          />
-          <button
-            type="submit"
-            disabled={isSending || !draft.trim()}
-            className="shrink-0 rounded-lg bg-indigo px-4 py-2 text-sm font-medium text-paper transition hover:bg-indigo-dark disabled:opacity-60"
-          >
-            Send
-          </button>
-        </form>
+        {isActive ? (
+          <form onSubmit={handleSend} className="flex items-center gap-2">
+            <input
+              value={draft}
+              onChange={handleDraftChange}
+              placeholder="Say something…"
+              className="min-w-0 flex-1 rounded-lg border border-charcoal/15 bg-white/70 px-3 py-2 text-sm text-charcoal placeholder:text-charcoal/40 focus:border-indigo focus:outline-none focus:ring-2 focus:ring-indigo/15"
+            />
+            <button
+              type="submit"
+              disabled={isSending || !draft.trim()}
+              className="shrink-0 rounded-lg bg-indigo px-4 py-2 text-sm font-medium text-paper transition hover:bg-indigo-dark disabled:opacity-60"
+            >
+              Send
+            </button>
+          </form>
+        ) : (
+          <p className="text-center text-xs text-charcoal/40">This conversation has ended.</p>
+        )}
       </div>
     </div>
   );

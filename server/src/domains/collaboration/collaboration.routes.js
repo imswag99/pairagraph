@@ -6,6 +6,7 @@ import {
   submitTurnHandler,
   respondToCompletionHandler,
   getTurnCountHandler,
+  leaveHandler,
 } from './collaboration.controller.js';
 
 const router = Router();
@@ -17,5 +18,6 @@ router.get('/turn-count', getTurnCountHandler);
 router.get('/:id', getOneHandler);
 router.post('/:id/turns', submitTurnHandler);
 router.post('/:id/completion', respondToCompletionHandler);
+router.post('/:id/leave', leaveHandler);
 
 export default router;

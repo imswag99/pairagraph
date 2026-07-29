@@ -170,6 +170,56 @@ test('getMine paginates and filters by status', async () => {
   assert.equal(pageOne.hasMore, pageOne.total > 1);
 });
 
+test('leave freezes the collaboration and records who left', async () => {
+  const collab = await makeCollaboration();
+
+  const updated = await collaborationService.leave(userA._id, collab._id);
+  assert.equal(updated.status, 'left');
+  assert.equal(updated.leftBy.toString(), userA._id.toString());
+});
+
+test('leave rejects a non-participant', async () => {
+  const collab = await makeCollaboration();
+  const stranger = await User.create({
+    displayName: 'Leave Stranger',
+    email: `${RUN_ID}-leave-stranger@example.com`,
+    authProvider: 'local',
+    passwordHash: 'irrelevant',
+    isEmailVerified: true,
+  });
+
+  await assert.rejects(
+    () => collaborationService.leave(stranger._id, collab._id),
+    (err) => err.statusCode === 403
+  );
+
+  await User.deleteOne({ _id: stranger._id });
+});
+
+test('leave rejects a collaboration that is already not in progress', async () => {
+  const collab = await makeCollaboration();
+  await collaborationService.leave(userA._id, collab._id);
+
+  await assert.rejects(
+    () => collaborationService.leave(userB._id, collab._id),
+    (err) => err.statusCode === 409
+  );
+});
+
+test('after leave, submitTurn and respondToCompletion both reject', async () => {
+  const collab = await makeCollaboration({ turnOwner: userA._id });
+  await collaborationService.leave(userA._id, collab._id);
+
+  await assert.rejects(
+    () => collaborationService.submitTurn(userA._id, collab._id, '<p>Too late</p>'),
+    (err) => err.statusCode === 409
+  );
+  await assert.rejects(
+    () => collaborationService.respondToCompletion(userB._id, collab._id, true),
+    (err) => err.statusCode === 409
+  );
+});
+
 test('getTurnCount only counts in-progress collaborations where it is this user\'s turn', async () => {
   const myTurn = await makeCollaboration({ turnOwner: userA._id });
   const theirTurn = await makeCollaboration({ turnOwner: userB._id });

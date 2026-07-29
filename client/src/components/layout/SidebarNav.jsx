@@ -1,8 +1,10 @@
 import { useEffect, useState } from 'react';
 import { NavLink } from 'react-router-dom';
 import { collaborationService } from '../../services/collaborationService.js';
+import { useAuth } from '../../context/AuthContext.jsx';
 
 export function SidebarNav() {
+  const { currentUser } = useAuth();
   const [turnCount, setTurnCount] = useState(0);
 
   useEffect(() => {
@@ -30,6 +32,11 @@ export function SidebarNav() {
       <NavLink to="/leaderboard" className={navLinkClass}>
         <span>Leaderboard</span>
       </NavLink>
+      {currentUser?.role === 'admin' && (
+        <NavLink to="/admin" className={navLinkClass}>
+          <span>Admin</span>
+        </NavLink>
+      )}
     </nav>
   );
 }

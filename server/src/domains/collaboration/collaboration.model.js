@@ -33,9 +33,10 @@ const collaborationSchema = new mongoose.Schema(
     keywords: { type: [String], default: [] },
     status: {
       type: String,
-      enum: ['in_progress', 'completed', 'private'],
+      enum: ['in_progress', 'completed', 'private', 'left'],
       default: 'in_progress',
     },
+    leftBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
   },
   { timestamps: true }
 );

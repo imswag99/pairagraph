@@ -7,6 +7,7 @@ const STATUS_LABEL = {
   in_progress: 'In progress',
   completed: 'Completed',
   private: 'Private',
+  left: 'Ended',
 };
 
 function formatUpdatedAt(dateString) {

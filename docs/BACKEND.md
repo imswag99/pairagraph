@@ -17,9 +17,9 @@ Turn-based, two-person collaborative writing app. This document covers the backe
 | `*.controller.js` | Thin: parse `req`, call the service, shape the JSON response |
 | `*.routes.js` | Express `Router`, wires `requireAuth` + endpoints to controller functions |
 
-Domains: **authentication, collaboration, matchmaking, invite, ai, chat, leaderboard**. Shared infrastructure lives outside the domains: `utils/` (ApiError, asyncHandler, tokens, mailer), `middleware/` (errorHandler), `sockets/` (Socket.IO setup), `testUtils/` (a throwaway Socket.IO server for tests that exercise services which broadcast).
+Domains: **authentication, collaboration, matchmaking, invite, ai, chat, leaderboard, moderation**. Shared infrastructure lives outside the domains: `utils/` (ApiError, asyncHandler, tokens, mailer), `middleware/` (errorHandler), `sockets/` (Socket.IO setup), `testUtils/` (a throwaway Socket.IO server for tests that exercise services which broadcast).
 
-**Why this shape:** the project spec called for "thin controllers, business logic inside services" and domain-based organization so new features (e.g. chat, leaderboard) slot in without touching unrelated code. Every domain has been verified end-to-end against the real database, either via the automated test suite (§12) or live curl/socket scripts during development.
+**Why this shape:** the project spec called for "thin controllers, business logic inside services" and domain-based organization so new features (e.g. chat, leaderboard) slot in without touching unrelated code. Every domain has been verified end-to-end against the real database, either via the automated test suite (§13) or live curl/socket scripts during development.
 
 **Error handling convention:** services throw `ApiError(statusCode, message)` for expected failures (validation, permission, not-found). `asyncHandler` wraps every controller so thrown/rejected errors reach the central `errorHandler` middleware, which returns `{ success: false, message }` — operational errors (`ApiError`) pass their message through; anything else becomes a generic 500 and gets logged server-side, so raw stack traces never leak to the client.
 
@@ -31,7 +31,9 @@ Domains: **authentication, collaboration, matchmaking, invite, ai, chat, leaderb
 
 **Why JWT access+refresh over sessions:** no Redis, no session store — access token (15 min) is cheap to verify on every request; refresh token (7 days) is rotated on each use and its hash (not the raw token) is stored on the `User` document, so a leaked DB doesn't hand out valid refresh tokens.
 
-**Model (`User`):** `displayName`, `email` (unique), `passwordHash` (absent for Google-only accounts), `authProvider` (`local`/`google`), `googleId` (sparse unique), `isEmailVerified`, `emailVerificationTokenHash` + expiry, `refreshTokenHash`, `passwordResetTokenHash` + expiry, `isDeleted`.
+**Model (`User`):** `displayName`, `email` (unique), `passwordHash` (absent for Google-only accounts), `authProvider` (`local`/`google`), `googleId` (sparse unique), `isEmailVerified`, `emailVerificationTokenHash` + expiry, `refreshTokenHash`, `passwordResetTokenHash` + expiry, `isDeleted`, `blockedUsers` (§9), `role` (`user`/`admin`, default `user`).
+
+**Admin access (§9):** `requireAdmin` — a second middleware alongside `requireAuth`, added when the admin reports panel needed it — does its own fresh `User.findById(req.user.id).select('role')` on every request rather than trusting anything in the JWT. This matters because `requireAuth` never touches the database at all (it just verifies the token and sets `req.user = { id: decoded.sub }` from the payload, which is only ever `{ sub: userId }`) — so a `role` change takes effect on the very next request, no re-login or token reissue needed. There is deliberately no API to grant admin; it's set exactly once, directly in the database, by the project owner on their own account — a self-service "promote to admin" endpoint would be a real privilege-escalation surface for zero benefit on a single-admin hobby project.
 
 **Endpoints:** `POST /register`, `GET /verify-email/:token`, `POST /login`, `POST /google`, `POST /refresh`, `POST /logout`, `GET /me`, `POST /forgot-password`, `POST /reset-password/:token`, `PATCH /me`, `POST /me/change-password`, `DELETE /me`.
 
@@ -51,15 +53,16 @@ Domains: **authentication, collaboration, matchmaking, invite, ai, chat, leaderb
 
 **What:** the actual turn-based writing loop and completion approval.
 
-**Model (`Collaboration`):** `participants` (exactly 2, schema-validated), `writingType` (`story`/`poem`), `turnOwner`, `entries` (`{author, content, submittedAt}`), `keywords` (5 words), `status` (`in_progress`/`completed`/`private`).
+**Model (`Collaboration`):** `participants` (exactly 2, schema-validated), `writingType` (`story`/`poem`), `turnOwner`, `entries` (`{author, content, submittedAt}`), `keywords` (5 words), `status` (`in_progress`/`completed`/`private`/`left`), `leftBy` (set only when `status === 'left'`).
 
 **Why this state machine:** the spec required turn-taking, immutable history, and mutual-approval completion, but left the edge cases undefined — these were resolved deliberately during design, not guessed:
 - Submitting a new turn **resets both participants' `hasApproved` to `null`** — prevents completing off a stale approval given before new content existed.
 - Turn submission is **always allowed** while `in_progress`, independent of a pending approval — no separate "pending completion" status.
 - A single rejection (`approve:false`) immediately sets `status:'private'`; two `true` approvals set `status:'completed'`, which also triggers the leaderboard's `awardCompletionPoints` (§8) exactly once, guarded by the same "no longer in progress" check that blocks any further completion responses on that collaboration.
 - One-line-per-turn (poem) / one-paragraph-per-turn (story) is enforced server-side by counting `<p>` tags and rejecting any `<br>` in poem content — defense-in-depth against a client that bypasses the editor's own restriction (see the editor's Enter-key blocking, front-end side).
+- **`leave` (added for the moderation follow-up, §9)** sets `status:'left'` and records `leftBy` — deliberately a distinct value from `'private'` (mutual decline) so the UI can tell the two apart and say who actually left, rather than showing the same generic label for a polite disagreement and someone escaping harassment. Reuses the exact same "no longer in progress" guard `submitTurn`/`respondToCompletion` already had, so both are automatically rejected on a left collaboration with zero changes to either function.
 
-**Endpoints:** `GET /collaborations` (list mine, summarized, paginated + filterable), `GET /collaborations/turn-count` (count of `in_progress` collaborations where it's this user's turn — a dedicated lightweight endpoint for the nav badge, cheaper than fetching full collaboration data just to derive a number), `GET /collaborations/:id` (full detail, populated), `POST /collaborations/:id/turns`, `POST /collaborations/:id/completion`.
+**Endpoints:** `GET /collaborations` (list mine, summarized, paginated + filterable), `GET /collaborations/turn-count` (count of `in_progress` collaborations where it's this user's turn — a dedicated lightweight endpoint for the nav badge, cheaper than fetching full collaboration data just to derive a number), `GET /collaborations/:id` (full detail, populated), `POST /collaborations/:id/turns`, `POST /collaborations/:id/completion`, `POST /collaborations/:id/leave`.
 
 **Pagination:** `GET /collaborations?status=<comma-separated>&page=&limit=` — `status` filters (e.g. `in_progress`, or `completed,private` for "past"), defaults to `page=1&limit=10`. Returns `{collaborations, hasMore, total}` rather than a bare array; `hasMore` is computed from an actual `countDocuments`, not a "did we get a full page" heuristic, since the query is cheap enough to just count.
 
@@ -109,6 +112,8 @@ Domains: **authentication, collaboration, matchmaking, invite, ai, chat, leaderb
 
 **Endpoints:** `GET/POST /collaborations/:collaborationId/chat`. Sending broadcasts `chat:message` to both participants' socket rooms (not just "the other one" — covers the sender's other open tabs too).
 
+**Freezing on leave (§9):** `sendMessage` rejects with a 409 once the collaboration's `status` is anything other than `in_progress` — this guard didn't exist until the "Leave collaboration" feature needed it (previously chat kept working forever regardless of collaboration status, even after a mutual completion decline). Reading history (`getHistory`) is deliberately **not** gated the same way — old messages stay visible to both sides no matter how the collaboration ended, only *new* sends are blocked.
+
 **Pagination:** `GET .../chat?limit=&before=` — cursor-based on `createdAt`, fetched newest-first server-side and reversed back to chronological order before returning. `hasMore` is a "did we get a full page" heuristic (`messages.length === limit`) rather than a separate count query — cheap, with a known edge case (a false positive if exactly `limit` messages remain with nothing older), which just costs one harmless extra "Load earlier" click that returns an empty page.
 
 **Typing indicator:** purely a Socket.IO relay (`chat:typing`) — client emits, server looks up the collaboration to find "the other participant" and relays to them. No REST endpoint, no persistence. The frontend hides the indicator if no new ping arrives within ~2.5s, since the server only ever relays "typing right now," never "stopped."
@@ -131,7 +136,27 @@ Domains: **authentication, collaboration, matchmaking, invite, ai, chat, leaderb
 
 ---
 
-## 9. Sockets
+## 9. Moderation domain
+
+**What:** a minimal but complete report/block mechanism — the highest-priority safety gap before considering any public launch, since Quick Match pairs complete strangers into a live chat + shared writing session with no prior moderation.
+
+**Model (`Report`):** `reporter`, `reportedUser`, `collaboration` (all required refs), `reason` (enum `harassment`/`spam`/`inappropriate_content`/`other`), `details` (string, max 1000). A unique compound index on `(reporter, collaboration)` makes repeated "Report" clicks on the same collaboration a no-op rather than a fresh notification each time — the same idempotency idiom as the leaderboard's unique-index-plus-`try/catch`-11000 pattern (§8).
+
+**Key design decision:** both `reportUser` and `blockUser` take a `collaborationId`, never a raw target user ID. The service verifies the caller is a participant (mirroring chat's `requireParticipant` check, §7), then derives the *other* participant as the target automatically. This makes self-report/self-block structurally impossible (a collaboration's two participants are always distinct) and rules out reporting/blocking an arbitrary unrelated user — there's no user directory or profile browsing anywhere in the app, so a collaboration is the only context in which one user ever learns another's identity.
+
+**Blocking:** stored as `blockedUsers` on the `User` document (authentication domain). `getMutuallyBlockedIds(userId)` combines "users I've blocked" with "users who've blocked me" into one list, reused by both matchmaking's `joinQueue` (excluded from the partner-claim query) and invite's `redeemInvite` (rejected with a deliberately vague 403 — never confirms a block occurred either way).
+
+**Reporting:** filing a report fires a fire-and-forget email to the project owner's own inbox (`mailer.sendReportNotificationEmail`) — the first email in the app to embed arbitrary user-submitted text (the `details` field) rather than only server-generated tokens/URLs, so it's run through a small local `escapeHtml` helper before interpolation. `Report` also carries a `status` (`open`/`reviewed`) so a report can be tracked as handled rather than the email being the only trace it ever existed.
+
+**Admin reports panel:** `listReports()` (all reports, newest first, `reporter`/`reportedUser` populated with `displayName`/`email`) and `markReportReviewed(reportId)` back a gated `/admin` page — the answer to "reports have no admin UI" beyond the one-off email. Both are admin-only (`requireAdmin`, §2); everything else in this domain stays reachable by any authenticated user.
+
+**Endpoints:** `POST /moderation/reports`, `POST /moderation/blocks`, `GET /moderation/blocks`, `DELETE /moderation/blocks/:userId` (the one exception to the collaboration-derived-target rule — safe since `$pull` only ever removes from the caller's own array), `GET /moderation/reports` (admin), `PATCH /moderation/reports/:id` (admin).
+
+**Leaving an in-progress collaboration:** originally an explicit scope cut ("blocking only prevents future re-matching, not an ongoing conversation") — closed as a follow-up once it was clear that gap mattered for severe cases. `POST /collaborations/:id/leave` (owned by the collaboration domain, §3, since it's a collaboration state transition, not a block/report action) freezes the collaboration for both participants — no more turns, no more chat (§7) — **without deleting anything either side wrote**. Rejected alternative: deleting the collaboration on leave, which would have destroyed the exact evidence a filed report needs, and let one person unilaterally erase content the other person co-authored and may have done nothing to deserve losing. Consistent with the project's existing anonymize-don't-delete precedent for account deletion (§2).
+
+---
+
+## 10. Sockets
 
 Every domain that needs to push a real-time notification (matchmaking, invite, collaboration, chat) shares one Socket.IO server (`sockets/index.js`):
 - **Auth:** a connection-level middleware reads the `accessToken` cookie from the handshake headers (hand-parsed — no new dependency) and verifies it with the same JWT logic as HTTP's `requireAuth`.
@@ -141,7 +166,7 @@ Every domain that needs to push a real-time notification (matchmaking, invite, c
 
 ---
 
-## 10. Rate limiting
+## 11. Rate limiting
 
 `express-rate-limit`, applied in `app.js`:
 - A general baseline across all of `/api`: 300 requests / 15 min per IP.
@@ -151,20 +176,20 @@ Every domain that needs to push a real-time notification (matchmaking, invite, c
 
 ---
 
-## 11. Automated testing
+## 12. Automated testing
 
 `npm test` (in `server/`) runs `node --test "src/**/*.test.js"` — Node's built-in test runner, zero new dependencies. Tests are colocated with the service they cover (`*.service.test.js`), and hit the **real** MongoDB Atlas dev database directly (matching this project's established practice of testing against real infrastructure rather than mocks), with explicit cleanup in every test.
 
 - **Mailer mocking:** `utils/mailer.js` exports a single mutable object (`{ sendVerificationEmail, sendPasswordResetEmail, sendGoogleAccountNoticeEmail }`) rather than named exports, specifically so `node:test`'s `mock.method()` can swap individual methods in auth tests — ES module named-export bindings are frozen and can't be mocked this way, a plain object's properties can.
 - **Socket-dependent services:** `testUtils/testSocket.js` spins up a throwaway HTTP server + `initIO()` so services that call `getIO()` (matchmaking, invite, collaboration) don't throw in tests — nothing needs to actually connect, `io.to(room).emit(...)` is a safe no-op with zero listening sockets.
-- **Coverage:** auth (register/login/verify/reset/change-password/delete), collaboration (turn ownership, one-line/one-paragraph enforcement, completion approve/reject, pagination + status filtering, turn-count), invites (create/redeem/cancel/self-redeem-block), matchmaking (pairing logic), leaderboard (idempotency, ranking, week-boundary exclusion, deleted-account exclusion). 44 tests total, all passing.
+- **Coverage:** auth (register/login/verify/reset/change-password/delete), collaboration (turn ownership, one-line/one-paragraph enforcement, completion approve/reject, pagination + status filtering, turn-count, leave-freezes-turns-and-completion), invites (create/redeem/cancel/self-redeem-block/blocked-redeemer-rejected), matchmaking (pairing logic, blocked-pair exclusion), leaderboard (idempotency, ranking, week-boundary exclusion, deleted-account exclusion), moderation (report/block authorization, duplicate-report idempotency, bidirectional block lookup, admin report listing/review), chat (send succeeds while in progress, send rejected once ended, history reads stay open regardless of status). 66 tests total, all passing.
 - **What's deliberately not covered:** raw Socket.IO event delivery over the wire (verified manually/via live scripts during development instead — a full socket-server integration harness was judged not worth the added complexity for the confidence gained), and there is currently no frontend test coverage at all (no Vitest/RTL/Playwright) — everything on the client has been verified by manual reasoning and live curl/socket scripts.
 
 ---
 
-## 12. CI/CD
+## 13. CI/CD
 
-`.github/workflows/server-tests.yml` runs the backend test suite (§11) on every push and pull request, on any branch: checkout → `actions/setup-node@v4` (Node 22) → `npm ci` (server/) → `npm test`.
+`.github/workflows/server-tests.yml` runs the backend test suite (§12) on every push and pull request, on any branch: checkout → `actions/setup-node@v4` (Node 22) → `npm ci` (server/) → `npm test`.
 
 - **Secrets required:** `MONGODB_URI`, `JWT_ACCESS_SECRET`, `JWT_REFRESH_SECRET` (repo Settings → Secrets and variables → Actions). Tests hit the same real Atlas dev database as local development — consistent with this project's practice of testing against real infrastructure, though it does mean CI and local dev share state.
 - **`GEMINI_API_KEY` is deliberately left unset in CI** — with no key, `generateKeywords()` falls straight through to the local fallback pool (§6), so running the suite never spends any of the 20-requests/day Gemini quota.
@@ -172,7 +197,7 @@ Every domain that needs to push a real-time notification (matchmaking, invite, c
 
 ---
 
-## 13. Bugs found and fixed
+## 14. Bugs found and fixed
 
 | # | Bug | Root cause | Fix |
 |---|---|---|---|
@@ -189,20 +214,23 @@ Every domain that needs to push a real-time notification (matchmaking, invite, c
 | 11 | Real Gemini calls turned out to be silently exhausted (429) for most of a session's testing | Free-tier daily quota (20/day) had already been burned through by dev testing; every call was quietly falling back to the local pool, which read as "keywords feel repetitive" rather than "AI isn't running at all" | Not a code fix — root-caused via direct logging against the live API, documented as a known ceiling (§6) |
 | 12 | New `PointsEntry` rows were leaking on every full test-suite run | `collaboration.service.test.js` predates the leaderboard feature; its "both approve → completed" test now triggers real point-awarding as a side effect of `respondToCompletion`, but that test file's cleanup was written before `PointsEntry` existed and never accounted for it | Added `PointsEntry` cleanup to that test file's `after()` hook; verified zero leftover rows across repeated full-suite runs |
 | 13 | CI failed at `npm ci` with `EUSAGE`, "package-lock.json in sync" error, on a repo that installed fine locally | `package-lock.json` was missing several nested transitive dependencies (`mongoose` carries its own optional `gcp-metadata@5.3.0`, distinct from `google-auth-library`'s `gcp-metadata@6.1.1`) — apparently omitted due to an npm-version-specific quirk when the lockfile was originally generated; `npm ci` validates strictly, `npm install` doesn't, and the locally-installed npm version didn't flag it as inconsistent either | Regenerated `package-lock.json` from a clean `node_modules`, verified `npm ci` succeeds and the full suite still passes, before committing the fix |
-| 14 | Forgot-password stuck on "Sending…" forever in production | `requestPasswordReset` awaited the actual SMTP send before the HTTP response returned; once deployed, the SMTP connection (first Gmail, then a second provider) hung with `ETIMEDOUT` on `CONN` — very likely Render blocking outbound SMTP ports (25/465/587) entirely, not a credential/config issue, since two completely different SMTP hosts failed identically | Stopped awaiting the mail send in the request path (fires in the background, errors logged server-side instead of blocking the response); added explicit nodemailer timeouts as a stopgap; ultimately replaced SMTP entirely with an HTTP API-based provider (port 443) since that's not subject to the same port-blocking risk — see §2 and the CVE note in §15 |
+| 14 | Forgot-password stuck on "Sending…" forever in production | `requestPasswordReset` awaited the actual SMTP send before the HTTP response returned; once deployed, the SMTP connection (first Gmail, then a second provider) hung with `ETIMEDOUT` on `CONN` — very likely Render blocking outbound SMTP ports (25/465/587) entirely, not a credential/config issue, since two completely different SMTP hosts failed identically | Stopped awaiting the mail send in the request path (fires in the background, errors logged server-side instead of blocking the response); added explicit nodemailer timeouts as a stopgap; ultimately replaced SMTP entirely with an HTTP API-based provider (port 443) since that's not subject to the same port-blocking risk — see §2 and the CVE note in §16 |
+| 17 | Two throwaway `nodemon`/`node` process trees were both already occupying port 5000 during manual verification of the report/block feature, one a genuinely stale leftover, the other from this session's own crashed restart attempt (a `lsof`-based kill silently no-op'd, since `lsof` doesn't exist in Git Bash on Windows) | Neither was a code bug — a repeat of the exact "orphaned dev-server processes" class of incident already logged in §15, this time compounded by a Windows/Git-Bash tooling gap | Used PowerShell's `Get-CimInstance Win32_Process` to find the full `cmd → nodemon → node` process tree by command line (not just the port holder) and killed every PID in both trees before restarting cleanly |
 | 15 | `express-rate-limit` threw `ERR_ERL_UNEXPECTED_X_FORWARDED_FOR` in production logs | Render sits behind a reverse proxy that sets `X-Forwarded-For`; Express's `trust proxy` setting defaults to `false`, so the rate limiter couldn't safely resolve the real client IP | `app.set('trust proxy', 1)` in `app.js` — trusts exactly the one proxy hop Render adds, matching the same fix Heroku deployments need |
 | 16 | Migrated email from SendGrid to Brevo before SendGrid's 60-day trial expired | SendGrid's dashboard confirmed (and its own pricing page corroborated) that the trial is genuinely time-limited with no permanent free tier — continuing past ~2026-09-25 would require a paid plan ($19.95/mo+), which conflicts with this project's no-added-cost constraint | Rewrote `mailer.js` to use `@getbrevo/brevo`'s `transactionalEmails.sendTransacEmail` instead of `@sendgrid/mail` (same `mailer` object shape, no other code touched); Brevo's free tier (300 emails/day) has no trial expiration. Done proactively, ~2 months ahead of the deadline, rather than waiting |
+| 18 | Blocking someone mid-collaboration didn't actually stop them from continuing to chat with you | Flagged as an explicit, deliberate scope cut when the report/block MVP shipped, then reconsidered: `chat.service.js`'s `sendMessage` had zero awareness of collaboration status, so chat kept working regardless of block state or even a mutual completion decline | Added a `leave` action (new `'left'` collaboration status, distinct from the existing `'private'` mutual-decline status) that freezes turns, completion, and now chat too for both participants — without deleting any data, so a filed report's context and the other participant's contributions both survive |
+| 19 | Filed reports had no way to be reviewed as a body of data — only a one-off email | Deliberate MVP scope cut when report/block shipped, closed as the next follow-up per explicit request | Added `role` to `User` (`user`/`admin`, set manually in the DB only — no self-service promotion endpoint), a `requireAdmin` middleware that re-checks the DB fresh on every request (no JWT payload change, so a role edit takes effect without re-login), and a gated `/admin` page listing reports with a "Mark reviewed" action and a direct link into the referenced collaboration |
 
-## 14. Operational incidents (not code bugs, but shaped a lot of this build)
+## 15. Operational incidents (not code bugs, but shaped a lot of this build)
 
 - **MongoDB Atlas connectivity outage:** login and turn-submission both 500'd with a raw TLS/`ReplicaSetNoPrimary` error from Mongoose. Root cause was Atlas's Network Access list no longer matching the current public IP (common with dynamic ISP addresses) — fixed by widening it to `0.0.0.0/0`. Not a code issue; confirmed by testing the exact same request before/after the allow-list change.
 - **Orphaned dev-server processes:** every manual restart this session killed only the process holding port 5000, never the `npm run dev` → `nodemon` parent chain that spawned it. Over many restarts this left **16 orphaned nodemon instances** silently running, all watching the same files and racing each other to rebind the port after any edit — whichever won a given restart could be serving stale code from hours earlier. Fixed by identifying and killing every `nodemon.js .../server.js` and `npm-cli.js run dev` process by exact command line before any subsequent restart.
 
-## 15. Known limitations (deliberately deferred, not overlooked)
+## 16. Known limitations (deliberately deferred, not overlooked)
 
 - **Three open dependency CVEs** (down from four — removing `nodemailer` in favor of an HTTP API-based email provider cleared its high-severity CVE as a side effect, not a dedicated fix), each requiring a breaking upgrade: `react-router`/`react-router-dom` (moderate, no fix exists in the 6.x line — needs a v6→v7 migration), Vite/esbuild (moderate-high, dev-server only, needs v5→v8), and a transitive `uuid`/`gaxios` issue pulled in via `google-auth-library` (fixing it means bumping that library, risking the Google Sign-In flow). All three were investigated and consciously deferred as separate migration tasks rather than bundled into unrelated work.
 - **Gemini's 20/day free-tier ceiling** (§6) — a product/cost decision, not a bug.
-- **Rate limiting and Socket.IO are single-instance only** (§9, §10) — fine for the current deployment, real gaps the moment this runs on more than one process.
+- **Rate limiting and Socket.IO are single-instance only** (§10, §11) — fine for the current deployment, real gaps the moment this runs on more than one process.
 - **No frontend test coverage** — see `docs/FRONTEND.md`.
 - No structured logging (raw `console.log`/`console.error` in a handful of places), no error-tracking/monitoring service.
 - **Email deliverability:** `EMAIL_FROM` is a free Gmail address rather than a verified custom domain, since the project has no domain to verify. On SendGrid this landed in Gmail's Spam folder (Gmail treats unauthenticated `@gmail.com` senders as suspicious). On Brevo (the current provider), Brevo instead auto-substitutes its own authenticated subdomain in place of the unauthenticated one (observed: mail arrives "from" `...@<id>.brevosend.com` rather than the real Gmail address) to satisfy Gmail/Yahoo's mandatory sender-authentication rules — this is why delivery to the inbox improved, at the cost of an unfamiliar-looking sender address. No code fix without a paid custom domain to properly authenticate — worth still surfacing "check your spam folder" in the UI copy as a safety net.

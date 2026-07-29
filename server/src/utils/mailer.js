@@ -17,6 +17,16 @@ function parseFromAddress(raw) {
 
 const sender = parseFromAddress(process.env.EMAIL_FROM);
 
+// The report email is the first place arbitrary user-submitted text (the
+// "details" field) gets embedded in an HTML email, rather than only
+// server-generated tokens/URLs — escape it so it can't break the markup.
+function escapeHtml(str) {
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+}
+
 async function sendVerificationEmail(email, rawToken) {
   const verifyUrl = `${process.env.CLIENT_URL}/verify-email/${rawToken}`;
 
@@ -52,10 +62,23 @@ async function sendGoogleAccountNoticeEmail(email) {
   });
 }
 
+async function sendReportNotificationEmail({ reporter, reportedUser, collaborationId, reason, details }) {
+  await brevo.transactionalEmails.sendTransacEmail({
+    sender,
+    to: [{ email: sender.email }],
+    subject: 'New report on Pairagraph',
+    htmlContent: `<p>${escapeHtml(reporter.displayName)} (${escapeHtml(reporter.email)}) reported ${escapeHtml(reportedUser.displayName)} (${escapeHtml(reportedUser.email)}).</p>
+           <p><strong>Reason:</strong> ${escapeHtml(reason)}</p>
+           ${details ? `<p><strong>Details:</strong> ${escapeHtml(details)}</p>` : ''}
+           <p>Collaboration ID: ${escapeHtml(collaborationId.toString())}</p>`,
+  });
+}
+
 // Exported as a single mutable object (rather than named exports) so tests can
 // swap individual methods with node:test's mock.method without hitting the real API.
 export const mailer = {
   sendVerificationEmail,
   sendPasswordResetEmail,
   sendGoogleAccountNoticeEmail,
+  sendReportNotificationEmail,
 };

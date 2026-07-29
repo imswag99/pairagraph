@@ -33,6 +33,16 @@ export function AppShell({ currentUser, logout, children }) {
           <SidebarNav />
           <main className="flex flex-col gap-10">{children}</main>
         </div>
+
+        <footer className="flex items-center gap-3 text-xs text-charcoal/35">
+          <Link to="/privacy" className="underline decoration-charcoal/20 underline-offset-4 hover:text-charcoal/55">
+            Privacy
+          </Link>
+          <span>·</span>
+          <Link to="/terms" className="underline decoration-charcoal/20 underline-offset-4 hover:text-charcoal/55">
+            Terms
+          </Link>
+        </footer>
       </div>
     </div>
   );

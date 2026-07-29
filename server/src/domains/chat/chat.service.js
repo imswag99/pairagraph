@@ -4,7 +4,7 @@ import { ApiError } from '../../utils/ApiError.js';
 import { getIO } from '../../sockets/index.js';
 
 async function requireParticipant(userId, collaborationId) {
-  const collaboration = await Collaboration.findById(collaborationId).select('participants');
+  const collaboration = await Collaboration.findById(collaborationId).select('participants status');
   const isParticipant =
     collaboration && collaboration.participants.some((p) => p.user.toString() === userId.toString());
   if (!isParticipant) {
@@ -15,6 +15,10 @@ async function requireParticipant(userId, collaborationId) {
 
 export async function sendMessage(userId, collaborationId, content) {
   const collaboration = await requireParticipant(userId, collaborationId);
+
+  if (collaboration.status !== 'in_progress') {
+    throw new ApiError(409, 'This collaboration has ended');
+  }
 
   const trimmedContent = content?.trim();
   if (!trimmedContent) {

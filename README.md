@@ -14,6 +14,7 @@ Pairagraph is a turn-based collaborative writing app: two people are paired up (
 - **Mutual-approval completion** — a collaboration only finishes once both participants agree.
 - **PDF export** of completed pieces, read as continuous prose rather than turn-by-turn, with bold/italic formatting preserved.
 - **Leaderboard** — points for finishing a collaboration together, with weekly and all-time rankings.
+- **Report, block, and leave** — flag a writing partner for review, block them from ever being matched with you again, or leave an active collaboration outright (freezes it for both sides without deleting anything either of you wrote). A gated admin panel lets the site owner review filed reports.
 - Paginated collaboration/chat history, a "your turn" count badge in the nav, and skeleton loading states throughout.
 
 ## Tech stack
@@ -30,7 +31,7 @@ pairagraph/
 ├── client/     React + Vite frontend
 ├── server/     Express backend, organized by domain
 │   └── src/domains/   authentication, collaboration, matchmaking,
-│                       invite, ai, chat, leaderboard
+│                       invite, ai, chat, leaderboard, moderation
 ├── docs/       BACKEND.md, FRONTEND.md
 └── .github/workflows/  CI (runs the backend test suite)
 ```
@@ -80,7 +81,7 @@ npm run dev       # http://localhost:5173
 
 ## Testing
 
-The backend has an automated test suite (`server/npm test`) covering auth, the turn-based writing rules, matchmaking, invites, and the leaderboard — it runs in CI on every push and pull request (see `.github/workflows/server-tests.yml`). The frontend does not yet have automated tests; see `docs/FRONTEND.md` for details and known gaps.
+The backend has an automated test suite (`server/npm test`) covering auth, the turn-based writing rules, matchmaking, invites, the leaderboard, and report/block moderation — it runs in CI on every push and pull request (see `.github/workflows/server-tests.yml`). The frontend does not yet have automated tests; see `docs/FRONTEND.md` for details and known gaps.
 
 ## License
 

@@ -25,6 +25,7 @@ function toSafeUser(user) {
     authProvider: user.authProvider,
     isEmailVerified: user.isEmailVerified,
     hasPassword: Boolean(user.passwordHash),
+    role: user.role,
   };
 }
 

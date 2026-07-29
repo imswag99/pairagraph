@@ -9,12 +9,15 @@ import { EntryList } from '../components/collaboration/EntryList.jsx';
 import { TurnComposer } from '../components/collaboration/TurnComposer.jsx';
 import { CompletionControls } from '../components/collaboration/CompletionControls.jsx';
 import { ChatPanel } from '../components/collaboration/ChatPanel.jsx';
+import { ReportModal } from '../components/collaboration/ReportModal.jsx';
 import { downloadCollaborationPdf } from '../utils/exportCollaborationPdf.js';
+import { moderationService } from '../services/moderationService.js';
 
 const STATUS_LABEL = {
   in_progress: 'In progress',
   completed: 'Completed',
   private: 'Private',
+  left: 'Ended',
 };
 
 export function CollaborationPage() {
@@ -22,6 +25,11 @@ export function CollaborationPage() {
   const { currentUser, isLoading: isAuthLoading } = useAuth();
   const [collaboration, setCollaboration] = useState(null);
   const [error, setError] = useState('');
+  const [isReportOpen, setIsReportOpen] = useState(false);
+  const [isConfirmingBlock, setIsConfirmingBlock] = useState(false);
+  const [blockMessage, setBlockMessage] = useState('');
+  const [isConfirmingLeave, setIsConfirmingLeave] = useState(false);
+  const [leaveError, setLeaveError] = useState('');
 
   useEffect(() => {
     collaborationService
@@ -79,6 +87,28 @@ export function CollaborationPage() {
     setCollaboration(data.collaboration);
   }
 
+  async function handleBlock() {
+    try {
+      await moderationService.blockUser(id);
+      setBlockMessage('Blocked');
+    } catch (err) {
+      setBlockMessage(err.message);
+    } finally {
+      setIsConfirmingBlock(false);
+    }
+  }
+
+  async function handleLeave() {
+    try {
+      const { data } = await collaborationService.leave(id);
+      setCollaboration(data.collaboration);
+    } catch (err) {
+      setLeaveError(err.message);
+    } finally {
+      setIsConfirmingLeave(false);
+    }
+  }
+
   return (
     <div className="min-h-screen bg-paper">
       <div className="mx-auto flex max-w-5xl flex-col gap-8 px-6 py-12 animate-fade-in">
@@ -87,11 +117,88 @@ export function CollaborationPage() {
             <PenMark className="h-6 w-6 text-indigo" />
             <span className="font-serif text-xl text-charcoal">Pairagraph</span>
           </Link>
-          <span className="max-w-full truncate text-sm text-charcoal/50">
-            {collaboration.writingType === 'poem' ? 'Poem' : 'Story'} with{' '}
-            {other?.user.displayName}
-          </span>
+          <div className="flex max-w-full items-center gap-2">
+            <span className="truncate text-sm text-charcoal/50">
+              {collaboration.writingType === 'poem' ? 'Poem' : 'Story'} with{' '}
+              {other?.user.displayName}
+            </span>
+            {other && (
+              <div className="flex shrink-0 items-center gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => setIsReportOpen(true)}
+                  className="rounded-full border border-charcoal/15 px-2.5 py-1 text-xs text-charcoal/50 transition hover:border-red-300 hover:text-red-600"
+                >
+                  Report
+                </button>
+                {isConfirmingBlock ? (
+                  <span className="flex items-center gap-1.5 text-xs text-charcoal/50">
+                    Block?
+                    <button
+                      type="button"
+                      onClick={handleBlock}
+                      className="font-medium text-red-600 hover:underline"
+                    >
+                      Yes
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setIsConfirmingBlock(false)}
+                      className="hover:underline"
+                    >
+                      Cancel
+                    </button>
+                  </span>
+                ) : blockMessage ? (
+                  <span className="text-xs text-charcoal/50">{blockMessage}</span>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => setIsConfirmingBlock(true)}
+                    className="rounded-full border border-charcoal/15 px-2.5 py-1 text-xs text-charcoal/50 transition hover:border-red-300 hover:text-red-600"
+                  >
+                    Block
+                  </button>
+                )}
+                {collaboration.status === 'in_progress' &&
+                  (isConfirmingLeave ? (
+                    <span className="flex items-center gap-1.5 text-xs text-charcoal/50">
+                      Leave?
+                      <button
+                        type="button"
+                        onClick={handleLeave}
+                        className="font-medium text-red-600 hover:underline"
+                      >
+                        Yes
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setIsConfirmingLeave(false)}
+                        className="hover:underline"
+                      >
+                        Cancel
+                      </button>
+                    </span>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => setIsConfirmingLeave(true)}
+                      className="rounded-full border border-charcoal/15 px-2.5 py-1 text-xs text-charcoal/50 transition hover:border-red-300 hover:text-red-600"
+                    >
+                      Leave
+                    </button>
+                  ))}
+                {leaveError && <span className="text-xs text-red-600">{leaveError}</span>}
+              </div>
+            )}
+          </div>
         </header>
+
+        <ReportModal
+          isOpen={isReportOpen}
+          onClose={() => setIsReportOpen(false)}
+          collaborationId={id}
+        />
 
         <div className="grid grid-cols-1 gap-8 lg:grid-cols-[1fr_320px] lg:items-start">
           <div className="flex flex-col gap-8">
@@ -136,6 +243,12 @@ export function CollaborationPage() {
                   Waiting for {other?.user.displayName}'s turn.
                 </p>
               )
+            ) : collaboration.status === 'left' ? (
+              <p className="text-center text-sm text-charcoal/50">
+                {collaboration.leftBy === currentUser.id
+                  ? 'You left this collaboration.'
+                  : `${other?.user.displayName} left this collaboration.`}
+              </p>
             ) : (
               <p className="text-center text-sm text-charcoal/50">
                 This collaboration is {STATUS_LABEL[collaboration.status].toLowerCase()}.
@@ -151,7 +264,11 @@ export function CollaborationPage() {
             )}
           </div>
 
-          <ChatPanel collaborationId={id} currentUserId={currentUser.id} />
+          <ChatPanel
+            collaborationId={id}
+            currentUserId={currentUser.id}
+            isActive={collaboration.status === 'in_progress'}
+          />
         </div>
       </div>
     </div>

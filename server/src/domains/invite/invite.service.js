@@ -1,6 +1,7 @@
 import { Invite } from './invite.model.js';
 import { Collaboration } from '../collaboration/collaboration.model.js';
 import { generateKeywords } from '../ai/ai.service.js';
+import { getMutuallyBlockedIds } from '../moderation/moderation.service.js';
 import { ApiError } from '../../utils/ApiError.js';
 import { generateRawToken } from '../../utils/tokens.js';
 import { getIO } from '../../sockets/index.js';
@@ -21,6 +22,11 @@ export async function redeemInvite(userId, code) {
   }
   if (invite.creator.toString() === userId.toString()) {
     throw new ApiError(400, "You can't redeem your own invite");
+  }
+
+  const excludedIds = await getMutuallyBlockedIds(userId);
+  if (excludedIds.some((id) => id.toString() === invite.creator.toString())) {
+    throw new ApiError(403, 'This invite can no longer be redeemed.');
   }
 
   const participantIds = [invite.creator, userId];

@@ -12,6 +12,7 @@ const RUN_ID = `match-test-${Date.now()}`;
 let testSocket;
 let userA;
 let userB;
+let userC;
 
 before(async () => {
   await mongoose.connect(process.env.MONGODB_URI);
@@ -31,12 +32,19 @@ before(async () => {
     passwordHash: 'irrelevant',
     isEmailVerified: true,
   });
+  userC = await User.create({
+    displayName: 'Match Carol',
+    email: `${RUN_ID}-carol@example.com`,
+    authProvider: 'local',
+    passwordHash: 'irrelevant',
+    isEmailVerified: true,
+  });
 });
 
 after(async () => {
-  await MatchQueueEntry.deleteMany({ user: { $in: [userA._id, userB._id] } });
-  await Collaboration.deleteMany({ 'participants.user': { $in: [userA._id, userB._id] } });
-  await User.deleteMany({ _id: { $in: [userA._id, userB._id] } });
+  await MatchQueueEntry.deleteMany({ user: { $in: [userA._id, userB._id, userC._id] } });
+  await Collaboration.deleteMany({ 'participants.user': { $in: [userA._id, userB._id, userC._id] } });
+  await User.deleteMany({ _id: { $in: [userA._id, userB._id, userC._id] } });
   await testSocket.close();
   await mongoose.connection.close();
 });
@@ -92,4 +100,26 @@ test('getStatus reports the writing type while waiting', async () => {
   assert.equal(status.writingType, 'poem');
 
   await matchmakingService.cancel(userA._id);
+});
+
+test('a blocked pair is skipped, but an unrelated third user still matches', async () => {
+  await User.findByIdAndUpdate(userA._id, { $addToSet: { blockedUsers: userB._id } });
+
+  await matchmakingService.joinQueue(userB._id, 'story');
+  const skippedResult = await matchmakingService.joinQueue(userA._id, 'story');
+  assert.equal(skippedResult.matched, false);
+
+  // Both A and B are now waiting but mutually excluded from each other;
+  // clear B out so C's join below deterministically pairs with A.
+  await matchmakingService.cancel(userB._id);
+
+  const matchedResult = await matchmakingService.joinQueue(userC._id, 'story');
+  assert.equal(matchedResult.matched, true);
+
+  const collab = await Collaboration.findById(matchedResult.collaborationId);
+  const participantIds = collab.participants.map((p) => p.user.toString());
+  assert.ok(participantIds.includes(userA._id.toString()));
+  assert.ok(participantIds.includes(userC._id.toString()));
+
+  await User.findByIdAndUpdate(userA._id, { $pull: { blockedUsers: userB._id } });
 });

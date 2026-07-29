@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAuth } from '../context/AuthContext.jsx';
 import { LoginModal } from '../components/auth/LoginModal.jsx';
@@ -82,6 +83,16 @@ function Hero({ onOpenModal }) {
           >
             Sign up
           </button>
+        </div>
+
+        <div className="mt-2 flex items-center gap-3 text-xs text-charcoal/40">
+          <Link to="/privacy" className="underline decoration-charcoal/20 underline-offset-4 hover:text-charcoal/60">
+            Privacy
+          </Link>
+          <span>·</span>
+          <Link to="/terms" className="underline decoration-charcoal/20 underline-offset-4 hover:text-charcoal/60">
+            Terms
+          </Link>
         </div>
       </div>
     </div>

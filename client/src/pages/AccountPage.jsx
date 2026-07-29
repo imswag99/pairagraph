@@ -1,7 +1,8 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Navigate, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext.jsx';
 import { AppShell } from '../components/layout/AppShell.jsx';
+import { moderationService } from '../services/moderationService.js';
 
 const inputClasses =
   'w-full rounded-lg border border-charcoal/15 bg-white/70 px-4 py-2.5 text-sm text-charcoal placeholder:text-charcoal/40 transition focus:border-indigo focus:outline-none focus:ring-2 focus:ring-indigo/15';
@@ -119,6 +120,55 @@ function PasswordSection({ currentUser }) {
   );
 }
 
+function BlockedUsersSection() {
+  const [blockedUsers, setBlockedUsers] = useState(null);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    moderationService
+      .getBlockedUsers()
+      .then(({ data }) => setBlockedUsers(data.blockedUsers))
+      .catch((err) => setError(err.message));
+  }, []);
+
+  async function handleUnblock(userId) {
+    try {
+      await moderationService.unblockUser(userId);
+      setBlockedUsers((prev) => prev.filter((u) => u._id !== userId));
+    } catch (err) {
+      setError(err.message);
+    }
+  }
+
+  return (
+    <section className="flex flex-col gap-3 rounded-xl border border-charcoal/10 bg-white/50 p-5">
+      <h2 className="font-serif text-lg text-charcoal">Blocked users</h2>
+      {error && <p className="text-sm text-red-600">{error}</p>}
+      {blockedUsers === null ? null : blockedUsers.length === 0 ? (
+        <p className="text-sm text-charcoal/50">You haven't blocked anyone.</p>
+      ) : (
+        <ul className="flex flex-col gap-2">
+          {blockedUsers.map((user) => (
+            <li
+              key={user._id}
+              className="flex items-center justify-between rounded-lg border border-charcoal/10 px-4 py-2.5 text-sm"
+            >
+              <span className="text-charcoal">{user.displayName}</span>
+              <button
+                type="button"
+                onClick={() => handleUnblock(user._id)}
+                className="text-xs text-charcoal/50 underline decoration-charcoal/20 underline-offset-4 transition hover:text-charcoal"
+              >
+                Unblock
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
+  );
+}
+
 function DangerZoneSection() {
   const { deleteAccount } = useAuth();
   const navigate = useNavigate();
@@ -177,6 +227,7 @@ export function AccountPage() {
       <h1 className="font-serif text-2xl text-charcoal">Account</h1>
       <ProfileSection currentUser={currentUser} />
       <PasswordSection currentUser={currentUser} />
+      <BlockedUsersSection />
       <DangerZoneSection />
     </AppShell>
   );

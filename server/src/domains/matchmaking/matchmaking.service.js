@@ -1,6 +1,7 @@
 import { MatchQueueEntry } from './matchmaking.model.js';
 import { Collaboration } from '../collaboration/collaboration.model.js';
 import { generateKeywords } from '../ai/ai.service.js';
+import { getMutuallyBlockedIds } from '../moderation/moderation.service.js';
 import { getIO } from '../../sockets/index.js';
 
 export async function joinQueue(userId, writingType) {
@@ -13,10 +14,12 @@ export async function joinQueue(userId, writingType) {
     return { matched: false };
   }
 
-  // Atomically claim a waiting partner of the same type, if one exists.
+  // Atomically claim a waiting partner of the same type, if one exists —
+  // excluding both the caller and anyone blocked in either direction.
+  const excludedIds = await getMutuallyBlockedIds(userId);
   const partnerEntry = await MatchQueueEntry.findOneAndDelete({
     writingType,
-    user: { $ne: userId },
+    user: { $nin: [userId, ...excludedIds] },
   });
 
   if (!partnerEntry) {
