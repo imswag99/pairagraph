@@ -218,7 +218,9 @@ export function ChatPanel({ collaborationId, currentUserId, isActive = true }) {
 
         {isActive ? (
           <form onSubmit={handleSend} className="flex items-center gap-2">
+            <label htmlFor="chat-message" className="sr-only">Chat message</label>
             <input
+              id="chat-message"
               value={draft}
               onChange={handleDraftChange}
               placeholder="Say something…"

@@ -43,7 +43,7 @@ export function VerifyEmailPage() {
         <PenMark className="h-8 w-8 text-indigo" />
 
         {status === 'verifying' && (
-          <p className="text-sm text-charcoal/60">Verifying your email…</p>
+          <p className="text-sm text-charcoal/70">Verifying your email…</p>
         )}
 
         {status === 'success' && (

@@ -31,7 +31,7 @@ export class ErrorBoundary extends Component {
         <div className="relative flex max-w-sm flex-col items-center gap-5 text-center animate-fade-in">
           <PenMark className="h-8 w-8 text-indigo" />
           <h1 className="font-serif text-2xl text-charcoal">Something went wrong</h1>
-          <p className="text-sm text-charcoal/60">
+          <p className="text-sm text-charcoal/70">
             This page hit an unexpected error. Reloading usually fixes it.
           </p>
           <a

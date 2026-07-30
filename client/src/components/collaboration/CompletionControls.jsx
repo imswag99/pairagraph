@@ -41,7 +41,7 @@ export function CompletionControls({ collaboration, currentUserId, onRespond }) 
             type="button"
             onClick={() => respond(false)}
             disabled={isSubmitting}
-            className="rounded-full border border-charcoal/20 px-4 py-1.5 text-xs text-charcoal/60 transition hover:border-charcoal/40 disabled:opacity-60"
+            className="rounded-full border border-charcoal/20 px-4 py-1.5 text-xs text-charcoal/70 transition hover:border-charcoal/40 disabled:opacity-60"
           >
             Decline
           </button>

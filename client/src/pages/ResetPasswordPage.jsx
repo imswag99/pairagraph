@@ -51,13 +51,15 @@ export function ResetPasswordPage() {
         {isDone ? (
           <>
             <h1 className="font-serif text-2xl text-charcoal">Password updated</h1>
-            <p className="text-sm text-charcoal/60">You can now log in with your new password.</p>
+            <p role="status" className="text-sm text-charcoal/70">You can now log in with your new password.</p>
           </>
         ) : (
           <>
             <h1 className="font-serif text-2xl text-charcoal">Choose a new password</h1>
             <form onSubmit={handleSubmit} className="w-full space-y-3 text-left">
+              <label htmlFor="reset-password" className="sr-only">New password (min 8 characters)</label>
               <input
+                id="reset-password"
                 type="password"
                 placeholder="New password (min 8 characters)"
                 value={password}
@@ -66,7 +68,9 @@ export function ResetPasswordPage() {
                 minLength={8}
                 className={inputClasses}
               />
+              <label htmlFor="reset-password-confirm" className="sr-only">Confirm new password</label>
               <input
+                id="reset-password-confirm"
                 type="password"
                 placeholder="Confirm new password"
                 value={confirmPassword}
@@ -75,7 +79,7 @@ export function ResetPasswordPage() {
                 minLength={8}
                 className={inputClasses}
               />
-              {error && <p className="text-sm text-red-600">{error}</p>}
+              {error && <p role="alert" className="text-sm text-red-600">{error}</p>}
               <button
                 type="submit"
                 disabled={isSubmitting}

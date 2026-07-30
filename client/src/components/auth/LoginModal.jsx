@@ -30,7 +30,9 @@ export function LoginModal({ isOpen, onClose, onForgotPassword }) {
   return (
     <Modal isOpen={isOpen} onClose={onClose} title="Log in">
       <form onSubmit={handleSubmit} className="space-y-3">
+        <label htmlFor="login-email" className="sr-only">Email</label>
         <input
+          id="login-email"
           type="email"
           placeholder="Email"
           value={email}
@@ -38,7 +40,9 @@ export function LoginModal({ isOpen, onClose, onForgotPassword }) {
           required
           className={inputClasses}
         />
+        <label htmlFor="login-password" className="sr-only">Password</label>
         <input
+          id="login-password"
           type="password"
           placeholder="Password"
           value={password}
@@ -46,7 +50,7 @@ export function LoginModal({ isOpen, onClose, onForgotPassword }) {
           required
           className={inputClasses}
         />
-        {error && <p className="text-sm text-red-600">{error}</p>}
+        {error && <p role="alert" className="text-sm text-red-600">{error}</p>}
         <button
           type="submit"
           disabled={isSubmitting}

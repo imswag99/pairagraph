@@ -56,12 +56,12 @@ export function QuickMatchPanel() {
     <div className="flex flex-col gap-4 rounded-xl border border-charcoal/10 bg-white/50 p-5">
       <div>
         <h3 className="font-serif text-lg text-charcoal">Quick Match</h3>
-        <p className="text-sm text-charcoal/60">Get paired with someone waiting right now.</p>
+        <p className="text-sm text-charcoal/70">Get paired with someone waiting right now.</p>
       </div>
 
       {isWaiting ? (
         <div className="flex items-center justify-between">
-          <span className="text-sm text-charcoal/60">
+          <span className="text-sm text-charcoal/70">
             Waiting for a {writingType} partner&hellip;
           </span>
           <button

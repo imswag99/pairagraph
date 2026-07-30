@@ -35,7 +35,7 @@ pairagraph/
 │                       invite, ai, chat, leaderboard, moderation, admin,
 │                       gallery
 ├── docs/       BACKEND.md, FRONTEND.md
-└── .github/workflows/  CI (runs the backend test suite)
+└── .github/workflows/  CI (runs the backend and frontend test suites)
 ```
 
 ## Getting started
@@ -80,10 +80,11 @@ npm run dev       # http://localhost:5173
 | `client/` | `npm run dev` | Start the Vite dev server |
 | `client/` | `npm run build` | Production build |
 | `client/` | `npm run preview` | Preview the production build locally |
+| `client/` | `npm test` | Run the frontend test suite (Vitest + React Testing Library) |
 
 ## Testing
 
-The backend has an automated test suite (`server/npm test`, 111 tests) covering auth, the turn-based writing rules, matchmaking, invites, the leaderboard, report/block moderation, admin user management, and the public gallery — it runs in CI on every push and pull request (see `.github/workflows/server-tests.yml`). The frontend does not yet have automated tests; see `docs/FRONTEND.md` for details and known gaps.
+The backend has an automated test suite (`server/npm test`, 115 tests) covering auth, the turn-based writing rules, matchmaking, invites, the leaderboard, report/block moderation, admin user management, and the public gallery — it runs in CI on every push and pull request (see `.github/workflows/server-tests.yml`). The frontend has a first slice of automated tests (`client/npm test`, 15 tests — session restore, the CAPTCHA single-use-token regression, and the core writing-loop UI), also in CI (`.github/workflows/client-tests.yml`); it's not yet comprehensive — see `docs/FRONTEND.md` for what's covered and what isn't.
 
 ## License
 

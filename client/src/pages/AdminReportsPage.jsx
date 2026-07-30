@@ -24,6 +24,7 @@ function formatDate(dateString) {
 function CollaborationPreview({ collaborationId }) {
   const [data, setData] = useState(null);
   const [error, setError] = useState('');
+  const [isUnpublishing, setIsUnpublishing] = useState(false);
 
   useEffect(() => {
     adminService
@@ -32,6 +33,21 @@ function CollaborationPreview({ collaborationId }) {
       .catch((err) => setError(err.message));
   }, [collaborationId]);
 
+  async function handleUnpublish() {
+    setIsUnpublishing(true);
+    try {
+      await adminService.unpublishCollaboration(collaborationId);
+      setData((prev) => ({
+        ...prev,
+        collaboration: { ...prev.collaboration, isPublished: false },
+      }));
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setIsUnpublishing(false);
+    }
+  }
+
   if (error) return <p className="text-xs text-red-600">{error}</p>;
   if (!data) return <p className="text-xs text-charcoal/40">Loading…</p>;
 
@@ -39,6 +55,19 @@ function CollaborationPreview({ collaborationId }) {
 
   return (
     <div className="flex flex-col gap-4 rounded-lg bg-charcoal/[0.03] p-4">
+      {collaboration.isPublished && (
+        <div className="flex items-center justify-between gap-2 rounded-lg bg-indigo-tint px-3 py-2 text-xs text-indigo-dark">
+          <span>This piece is currently published to the public gallery.</span>
+          <button
+            type="button"
+            onClick={handleUnpublish}
+            disabled={isUnpublishing}
+            className="rounded-full border border-indigo/40 px-3 py-1 font-medium transition hover:border-indigo hover:bg-white/50 disabled:opacity-60"
+          >
+            {isUnpublishing ? 'Unpublishing…' : 'Unpublish'}
+          </button>
+        </div>
+      )}
       <div className="flex flex-col gap-3">
         <span className="text-xs uppercase tracking-wide text-charcoal/40">Entries</span>
         {collaboration.entries.length === 0 ? (
@@ -96,11 +125,17 @@ function ReportRow({ report, onMarkReviewed }) {
 
       <p className="text-sm text-charcoal">
         <strong>{report.reporter?.displayName ?? 'Deleted user'}</strong> ({report.reporter?.email})
-        {' → '}
-        <strong>{report.reportedUser?.displayName ?? 'Deleted user'}</strong> ({report.reportedUser?.email})
+        {report.source === 'gallery' ? (
+          ' reported a published piece'
+        ) : (
+          <>
+            {' → '}
+            <strong>{report.reportedUser?.displayName ?? 'Deleted user'}</strong> ({report.reportedUser?.email})
+          </>
+        )}
       </p>
 
-      {report.details && <p className="text-sm text-charcoal/60">{report.details}</p>}
+      {report.details && <p className="text-sm text-charcoal/70">{report.details}</p>}
 
       <div className="flex items-center gap-3">
         <button
@@ -117,7 +152,7 @@ function ReportRow({ report, onMarkReviewed }) {
             type="button"
             onClick={handleMarkReviewed}
             disabled={isSaving}
-            className="rounded-full border border-charcoal/15 px-3 py-1 text-xs text-charcoal/60 transition hover:border-indigo/40 hover:text-charcoal disabled:opacity-60"
+            className="rounded-full border border-charcoal/15 px-3 py-1 text-xs text-charcoal/70 transition hover:border-indigo/40 hover:text-charcoal disabled:opacity-60"
           >
             {isSaving ? 'Saving…' : 'Mark reviewed'}
           </button>

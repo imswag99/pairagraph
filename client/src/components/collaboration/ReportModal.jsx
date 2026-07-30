@@ -12,7 +12,7 @@ const REASONS = [
   { value: 'other', label: 'Other' },
 ];
 
-export function ReportModal({ isOpen, onClose, collaborationId }) {
+export function ReportModal({ isOpen, onClose, collaborationId, mode = 'participant' }) {
   const [reason, setReason] = useState('harassment');
   const [details, setDetails] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -32,7 +32,11 @@ export function ReportModal({ isOpen, onClose, collaborationId }) {
     setError('');
     setIsSubmitting(true);
     try {
-      await moderationService.reportUser(collaborationId, reason, details);
+      if (mode === 'gallery') {
+        await moderationService.reportGalleryContent(collaborationId, reason, details);
+      } else {
+        await moderationService.reportUser(collaborationId, reason, details);
+      }
       setMessage("Thanks — we've received your report.");
     } catch (err) {
       setError(err.message);
@@ -42,12 +46,14 @@ export function ReportModal({ isOpen, onClose, collaborationId }) {
   }
 
   return (
-    <Modal isOpen={isOpen} onClose={handleClose} title="Report this user">
+    <Modal isOpen={isOpen} onClose={handleClose} title={mode === 'gallery' ? 'Report this piece' : 'Report this user'}>
       {message ? (
-        <p className="text-sm text-charcoal/70">{message}</p>
+        <p role="status" className="text-sm text-charcoal/70">{message}</p>
       ) : (
         <form onSubmit={handleSubmit} className="space-y-3">
+          <label htmlFor="report-reason" className="sr-only">Reason</label>
           <select
+            id="report-reason"
             value={reason}
             onChange={(e) => setReason(e.target.value)}
             className={inputClasses}
@@ -58,7 +64,9 @@ export function ReportModal({ isOpen, onClose, collaborationId }) {
               </option>
             ))}
           </select>
+          <label htmlFor="report-details" className="sr-only">Anything else we should know? (optional)</label>
           <textarea
+            id="report-details"
             placeholder="Anything else we should know? (optional)"
             value={details}
             onChange={(e) => setDetails(e.target.value)}
@@ -66,7 +74,7 @@ export function ReportModal({ isOpen, onClose, collaborationId }) {
             rows={4}
             className={inputClasses}
           />
-          {error && <p className="text-sm text-red-600">{error}</p>}
+          {error && <p role="alert" className="text-sm text-red-600">{error}</p>}
           <button
             type="submit"
             disabled={isSubmitting}

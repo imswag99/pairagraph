@@ -34,7 +34,9 @@ function ProfileSection({ currentUser }) {
     <section className="flex flex-col gap-3 rounded-xl border border-charcoal/10 bg-white/50 p-5">
       <h2 className="font-serif text-lg text-charcoal">Profile</h2>
       <form onSubmit={handleSubmit} className="flex flex-col gap-3 sm:flex-row sm:items-start">
+        <label htmlFor="account-display-name" className="sr-only">Display name</label>
         <input
+          id="account-display-name"
           value={displayName}
           onChange={(e) => setDisplayName(e.target.value)}
           required
@@ -48,8 +50,8 @@ function ProfileSection({ currentUser }) {
           {isSaving ? 'Saving…' : 'Save'}
         </button>
       </form>
-      {message && <p className="text-sm text-indigo-dark">{message}</p>}
-      {error && <p className="text-sm text-red-600">{error}</p>}
+      {message && <p role="status" className="text-sm text-indigo-dark">{message}</p>}
+      {error && <p role="alert" className="text-sm text-red-600">{error}</p>}
     </section>
   );
 }
@@ -83,13 +85,15 @@ function PasswordSection({ currentUser }) {
     <section className="flex flex-col gap-3 rounded-xl border border-charcoal/10 bg-white/50 p-5">
       <h2 className="font-serif text-lg text-charcoal">Password</h2>
       {!currentUser.hasPassword ? (
-        <p className="text-sm text-charcoal/60">
+        <p className="text-sm text-charcoal/70">
           This account signs in with Google and has no password set. Use "Forgot password" from the
           login screen to set one.
         </p>
       ) : (
         <form onSubmit={handleSubmit} className="flex flex-col gap-3">
+          <label htmlFor="account-current-password" className="sr-only">Current password</label>
           <input
+            id="account-current-password"
             type="password"
             placeholder="Current password"
             value={currentPassword}
@@ -97,7 +101,9 @@ function PasswordSection({ currentUser }) {
             required
             className={inputClasses}
           />
+          <label htmlFor="account-new-password" className="sr-only">New password (min 8 characters)</label>
           <input
+            id="account-new-password"
             type="password"
             placeholder="New password (min 8 characters)"
             value={newPassword}
@@ -106,8 +112,8 @@ function PasswordSection({ currentUser }) {
             minLength={8}
             className={inputClasses}
           />
-          {message && <p className="text-sm text-indigo-dark">{message}</p>}
-          {error && <p className="text-sm text-red-600">{error}</p>}
+          {message && <p role="status" className="text-sm text-indigo-dark">{message}</p>}
+          {error && <p role="alert" className="text-sm text-red-600">{error}</p>}
           <button
             type="submit"
             disabled={isSaving}
@@ -144,7 +150,7 @@ function BlockedUsersSection() {
   return (
     <section className="flex flex-col gap-3 rounded-xl border border-charcoal/10 bg-white/50 p-5">
       <h2 className="font-serif text-lg text-charcoal">Blocked users</h2>
-      {error && <p className="text-sm text-red-600">{error}</p>}
+      {error && <p role="alert" className="text-sm text-red-600">{error}</p>}
       {blockedUsers === null ? null : blockedUsers.length === 0 ? (
         <p className="text-sm text-charcoal/50">You haven't blocked anyone.</p>
       ) : (
@@ -192,12 +198,14 @@ function DangerZoneSection() {
   return (
     <section className="flex flex-col gap-3 rounded-xl border border-red-200 bg-red-50/50 p-5">
       <h2 className="font-serif text-lg text-charcoal">Danger zone</h2>
-      <p className="text-sm text-charcoal/60">
+      <p className="text-sm text-charcoal/70">
         Deleting your account removes your login and personal info. Collaborations you were part of
         stay visible to the other participant, attributed to "Deleted user". This can't be undone.
       </p>
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+        <label htmlFor="account-delete-confirm" className="sr-only">Type "delete" to confirm</label>
         <input
+          id="account-delete-confirm"
           value={confirmText}
           onChange={(e) => setConfirmText(e.target.value)}
           placeholder='Type "delete" to confirm'
@@ -212,7 +220,7 @@ function DangerZoneSection() {
           {isDeleting ? 'Deleting…' : 'Delete account'}
         </button>
       </div>
-      {error && <p className="text-sm text-red-600">{error}</p>}
+      {error && <p role="alert" className="text-sm text-red-600">{error}</p>}
     </section>
   );
 }

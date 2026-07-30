@@ -94,11 +94,11 @@ function Hero({ onOpenModal }) {
         </Link>
 
         <div className="mt-2 flex items-center gap-3 text-xs text-charcoal/40">
-          <Link to="/privacy" className="underline decoration-charcoal/20 underline-offset-4 hover:text-charcoal/60">
+          <Link to="/privacy" className="underline decoration-charcoal/20 underline-offset-4 hover:text-charcoal/70">
             Privacy
           </Link>
           <span>·</span>
-          <Link to="/terms" className="underline decoration-charcoal/20 underline-offset-4 hover:text-charcoal/60">
+          <Link to="/terms" className="underline decoration-charcoal/20 underline-offset-4 hover:text-charcoal/70">
             Terms
           </Link>
         </div>
@@ -141,7 +141,7 @@ function DashboardHero({ displayName }) {
         </motion.h1>
         <motion.p
           variants={heroItemVariants}
-          className="max-w-md font-serif text-base italic leading-relaxed text-charcoal/60"
+          className="max-w-md font-serif text-base italic leading-relaxed text-charcoal/70"
         >
           A quiet page for two, written one turn at a time.
         </motion.p>

@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { requireAuth, requireAdmin } from '../authentication/auth.middleware.js';
 import {
   createReportHandler,
+  createGalleryReportHandler,
   createBlockHandler,
   deleteBlockHandler,
   listBlocksHandler,
@@ -14,6 +15,7 @@ const router = Router();
 router.use(requireAuth);
 
 router.post('/reports', createReportHandler);
+router.post('/gallery-reports', createGalleryReportHandler);
 router.post('/blocks', createBlockHandler);
 router.get('/blocks', listBlocksHandler);
 router.delete('/blocks/:userId', deleteBlockHandler);

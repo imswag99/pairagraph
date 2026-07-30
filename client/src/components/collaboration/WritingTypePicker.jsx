@@ -15,7 +15,7 @@ export function WritingTypePicker({ value, onChange }) {
           className={`rounded-full border px-4 py-1.5 text-sm transition ${
             value === option.value
               ? 'border-indigo bg-indigo text-paper'
-              : 'border-charcoal/15 text-charcoal/60 hover:border-indigo/50 hover:text-charcoal'
+              : 'border-charcoal/15 text-charcoal/70 hover:border-indigo/50 hover:text-charcoal'
           }`}
         >
           {option.label}

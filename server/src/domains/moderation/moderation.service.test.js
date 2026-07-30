@@ -15,6 +15,7 @@ let userA;
 let userB;
 let outsider;
 let collaboration;
+let publishedCollaboration;
 
 before(async () => {
   await mongoose.connect(process.env.MONGODB_URI);
@@ -46,17 +47,26 @@ before(async () => {
     writingType: 'story',
     turnOwner: userA._id,
   });
+
+  publishedCollaboration = await Collaboration.create({
+    participants: [{ user: userA._id }, { user: userB._id }],
+    writingType: 'story',
+    turnOwner: userA._id,
+    status: 'completed',
+    isPublished: true,
+  });
 });
 
 after(async () => {
   await Report.deleteMany({ reporter: { $in: [userA._id, userB._id, outsider._id] } });
-  await Collaboration.deleteMany({ _id: collaboration._id });
+  await Collaboration.deleteMany({ _id: { $in: [collaboration._id, publishedCollaboration._id] } });
   await User.deleteMany({ _id: { $in: [userA._id, userB._id, outsider._id] } });
   await mongoose.connection.close();
 });
 
 beforeEach(() => {
   mock.method(mailer, 'sendReportNotificationEmail', async () => {});
+  mock.method(mailer, 'sendGalleryReportNotificationEmail', async () => {});
 });
 
 test('reportUser rejects a caller who is not a participant', async () => {
@@ -166,4 +176,57 @@ test('markReportReviewed rejects a bogus id', async () => {
     () => moderationService.markReportReviewed(new mongoose.Types.ObjectId()),
     (err) => err.statusCode === 404
   );
+});
+
+// These four run last on purpose: listReports/markReportReviewed above rely
+// on assumptions about report ordering and a non-null reportedUser on the
+// newest report, and every report created here would otherwise become the
+// newest and break those assertions.
+
+test('reportGalleryContent rejects an unpublished collaboration', async () => {
+  await assert.rejects(
+    () => moderationService.reportGalleryContent(outsider._id, collaboration._id, { reason: 'spam' }),
+    (err) => err.statusCode === 404
+  );
+});
+
+test('reportGalleryContent rejects a nonexistent collaboration', async () => {
+  await assert.rejects(
+    () =>
+      moderationService.reportGalleryContent(outsider._id, new mongoose.Types.ObjectId(), {
+        reason: 'spam',
+      }),
+    (err) => err.statusCode === 404
+  );
+});
+
+test('reportGalleryContent succeeds for a non-participant reporting a published piece', async () => {
+  await moderationService.reportGalleryContent(outsider._id, publishedCollaboration._id, {
+    reason: 'inappropriate_content',
+    details: 'Contains slurs',
+  });
+
+  const report = await Report.findOne({
+    reporter: outsider._id,
+    collaboration: publishedCollaboration._id,
+  });
+  assert.ok(report);
+  assert.equal(report.reportedUser, null);
+  assert.equal(report.source, 'gallery');
+  assert.equal(mailer.sendGalleryReportNotificationEmail.mock.calls.length, 1);
+});
+
+test('reportGalleryContent is idempotent for a repeated report from the same reporter', async () => {
+  await moderationService.reportGalleryContent(userB._id, publishedCollaboration._id, {
+    reason: 'spam',
+  });
+  await moderationService.reportGalleryContent(userB._id, publishedCollaboration._id, {
+    reason: 'spam',
+  });
+
+  const reports = await Report.find({
+    reporter: userB._id,
+    collaboration: publishedCollaboration._id,
+  });
+  assert.equal(reports.length, 1);
 });

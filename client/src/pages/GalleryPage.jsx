@@ -138,7 +138,7 @@ function GalleryContent() {
               type="button"
               onClick={handleLoadMore}
               disabled={isLoadingMore}
-              className="self-center rounded-full border border-charcoal/15 px-5 py-2 text-sm text-charcoal/60 transition hover:border-indigo/40 hover:text-charcoal disabled:opacity-60"
+              className="self-center rounded-full border border-charcoal/15 px-5 py-2 text-sm text-charcoal/70 transition hover:border-indigo/40 hover:text-charcoal disabled:opacity-60"
             >
               {isLoadingMore ? 'Loading…' : 'Load more'}
             </button>

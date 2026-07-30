@@ -14,7 +14,7 @@ export function SidebarNav() {
 
   const navLinkClass = ({ isActive }) =>
     `flex items-center justify-between gap-2 rounded-lg px-4 py-2 text-sm font-medium transition ${
-      isActive ? 'bg-indigo-tint text-indigo-dark' : 'text-charcoal/60 hover:bg-charcoal/5 hover:text-charcoal'
+      isActive ? 'bg-indigo-tint text-indigo-dark' : 'text-charcoal/70 hover:bg-charcoal/5 hover:text-charcoal'
     }`;
 
   return (

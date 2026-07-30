@@ -38,13 +38,15 @@ export function ForgotPasswordModal({ isOpen, onClose }) {
   return (
     <Modal isOpen={isOpen} onClose={handleClose} title="Reset your password">
       {message ? (
-        <p className="text-sm text-charcoal/70">{message}</p>
+        <p role="status" className="text-sm text-charcoal/70">{message}</p>
       ) : (
         <form onSubmit={handleSubmit} className="space-y-3">
-          <p className="text-sm text-charcoal/60">
+          <p className="text-sm text-charcoal/70">
             Enter your email and we'll send you a link to choose a new password.
           </p>
+          <label htmlFor="forgot-password-email" className="sr-only">Email</label>
           <input
+            id="forgot-password-email"
             type="email"
             placeholder="Email"
             value={email}
@@ -52,7 +54,7 @@ export function ForgotPasswordModal({ isOpen, onClose }) {
             required
             className={inputClasses}
           />
-          {error && <p className="text-sm text-red-600">{error}</p>}
+          {error && <p role="alert" className="text-sm text-red-600">{error}</p>}
           <button
             type="submit"
             disabled={isSubmitting}

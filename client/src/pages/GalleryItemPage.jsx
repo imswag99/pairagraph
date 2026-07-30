@@ -5,11 +5,13 @@ import { AppShell } from '../components/layout/AppShell.jsx';
 import { PenMark } from '../components/PenMark.jsx';
 import { EntryList } from '../components/collaboration/EntryList.jsx';
 import { KeywordChips } from '../components/collaboration/KeywordChips.jsx';
+import { ReportModal } from '../components/collaboration/ReportModal.jsx';
 import { galleryService } from '../services/galleryService.js';
 
-function GalleryItemContent({ id }) {
+function GalleryItemContent({ id, canReport }) {
   const [piece, setPiece] = useState(null);
   const [error, setError] = useState('');
+  const [isReportOpen, setIsReportOpen] = useState(false);
 
   useEffect(() => {
     setPiece(null);
@@ -47,10 +49,30 @@ function GalleryItemContent({ id }) {
           <div className="h-px w-full bg-charcoal/10" />
           <EntryList entries={piece.entries} />
           <div className="h-px w-full bg-charcoal/10" />
-          <p className="text-xs text-charcoal/40">
-            Written by {piece.authors.join(' & ')} · {new Date(piece.publishedAt).toLocaleDateString()}
-          </p>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <p className="text-xs text-charcoal/40">
+              Written by {piece.authors.join(' & ')} · {new Date(piece.publishedAt).toLocaleDateString()}
+            </p>
+            {canReport && (
+              <button
+                type="button"
+                onClick={() => setIsReportOpen(true)}
+                className="text-xs text-charcoal/40 underline decoration-charcoal/20 underline-offset-4 transition hover:text-red-600"
+              >
+                Report this piece
+              </button>
+            )}
+          </div>
         </div>
+      )}
+
+      {canReport && (
+        <ReportModal
+          isOpen={isReportOpen}
+          onClose={() => setIsReportOpen(false)}
+          collaborationId={id}
+          mode="gallery"
+        />
       )}
     </div>
   );
@@ -65,7 +87,7 @@ export function GalleryItemPage() {
   if (currentUser) {
     return (
       <AppShell currentUser={currentUser} logout={logout}>
-        <GalleryItemContent id={id} />
+        <GalleryItemContent id={id} canReport />
       </AppShell>
     );
   }
@@ -77,7 +99,7 @@ export function GalleryItemPage() {
           <PenMark className="h-6 w-6 text-indigo" />
           <span className="font-serif text-xl text-charcoal">Pairagraph</span>
         </Link>
-        <GalleryItemContent id={id} />
+        <GalleryItemContent id={id} canReport={false} />
       </div>
     </div>
   );

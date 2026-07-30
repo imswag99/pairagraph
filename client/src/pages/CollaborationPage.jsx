@@ -54,7 +54,7 @@ export function CollaborationPage() {
   if (error) {
     return (
       <div className="flex min-h-screen flex-col items-center justify-center gap-4 bg-paper px-6 text-center">
-        <p className="text-sm text-charcoal/60">{error}</p>
+        <p className="text-sm text-charcoal/70">{error}</p>
         <Link
           to="/"
           className="text-sm text-indigo-dark underline decoration-indigo/30 underline-offset-4 transition hover:text-indigo"
@@ -242,7 +242,7 @@ export function CollaborationPage() {
             </div>
 
             {collaboration.status === 'completed' && (
-              <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg bg-charcoal/5 px-4 py-3 text-xs text-charcoal/60">
+              <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg bg-charcoal/5 px-4 py-3 text-xs text-charcoal/70">
                 <span>
                   {collaboration.isPublished
                     ? 'Published to the public gallery.'

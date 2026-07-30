@@ -74,6 +74,18 @@ async function sendReportNotificationEmail({ reporter, reportedUser, collaborati
   });
 }
 
+async function sendGalleryReportNotificationEmail({ reporter, collaborationId, reason, details }) {
+  await brevo.transactionalEmails.sendTransacEmail({
+    sender,
+    to: [{ email: sender.email }],
+    subject: 'New gallery report on Pairagraph',
+    htmlContent: `<p>${escapeHtml(reporter.displayName)} (${escapeHtml(reporter.email)}) reported a published piece.</p>
+           <p><strong>Reason:</strong> ${escapeHtml(reason)}</p>
+           ${details ? `<p><strong>Details:</strong> ${escapeHtml(details)}</p>` : ''}
+           <p>Collaboration ID: ${escapeHtml(collaborationId.toString())}</p>`,
+  });
+}
+
 async function sendYourTurnEmail(email, { collaborationId, writingType }) {
   const url = `${process.env.CLIENT_URL}/collaborations/${collaborationId}`;
 
@@ -93,5 +105,6 @@ export const mailer = {
   sendPasswordResetEmail,
   sendGoogleAccountNoticeEmail,
   sendReportNotificationEmail,
+  sendGalleryReportNotificationEmail,
   sendYourTurnEmail,
 };

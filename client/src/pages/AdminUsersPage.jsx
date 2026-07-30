@@ -68,12 +68,12 @@ function UserRow({ user, isSelf, onBan, onUnban, onDelete }) {
           </span>
         )}
         {user.isBanned && (
-          <span className="rounded-full bg-charcoal/10 px-2 py-0.5 font-medium text-charcoal/60">
+          <span className="rounded-full bg-charcoal/10 px-2 py-0.5 font-medium text-charcoal/70">
             Banned
           </span>
         )}
         {user.isDeleted && (
-          <span className="rounded-full bg-charcoal/10 px-2 py-0.5 font-medium text-charcoal/60">
+          <span className="rounded-full bg-charcoal/10 px-2 py-0.5 font-medium text-charcoal/70">
             Deleted
           </span>
         )}
@@ -85,7 +85,7 @@ function UserRow({ user, isSelf, onBan, onUnban, onDelete }) {
             type="button"
             onClick={handleBanToggle}
             disabled={isSaving}
-            className="rounded-full border border-charcoal/15 px-3 py-1 text-xs text-charcoal/60 transition hover:border-indigo/40 hover:text-charcoal disabled:opacity-60"
+            className="rounded-full border border-charcoal/15 px-3 py-1 text-xs text-charcoal/70 transition hover:border-indigo/40 hover:text-charcoal disabled:opacity-60"
           >
             {isSaving ? 'Saving…' : user.isBanned ? 'Unban' : 'Ban'}
           </button>

@@ -107,7 +107,7 @@ export function InvitePanel() {
     <div className="flex flex-col gap-4 rounded-xl border border-charcoal/10 bg-white/50 p-5">
       <div>
         <h3 className="font-serif text-lg text-charcoal">Invite a friend</h3>
-        <p className="text-sm text-charcoal/60">
+        <p className="text-sm text-charcoal/70">
           {tab === 'create' ? 'Send a link to write with someone.' : 'Have a link or code? Join here.'}
         </p>
       </div>
@@ -154,7 +154,7 @@ export function InvitePanel() {
             </button>
           </div>
           <div className="flex items-center justify-between">
-            <span className="text-sm text-charcoal/60">Waiting for them to join&hellip;</span>
+            <span className="text-sm text-charcoal/70">Waiting for them to join&hellip;</span>
             <button
               type="button"
               onClick={handleCancel}

@@ -29,7 +29,7 @@ export function InvitePage() {
   if (error) {
     return (
       <div className="flex min-h-screen flex-col items-center justify-center gap-4 bg-paper px-6 text-center">
-        <p className="text-sm text-charcoal/60">{error}</p>
+        <p className="text-sm text-charcoal/70">{error}</p>
         <Link
           to="/"
           className="text-sm text-indigo-dark underline decoration-indigo/30 underline-offset-4 transition hover:text-indigo"
@@ -63,7 +63,7 @@ export function InvitePage() {
           <h1 className="font-serif text-2xl text-charcoal">
             You've been invited to write together
           </h1>
-          <p className="text-sm text-charcoal/60">Log in or create an account to join.</p>
+          <p className="text-sm text-charcoal/70">Log in or create an account to join.</p>
         </div>
         <div className="flex items-center gap-3">
           <button

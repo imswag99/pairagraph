@@ -23,8 +23,16 @@ export function RichTextEditor({ value, onChange, placeholder }) {
       // Enter create a second block or a line break in the first place.
       handleKeyDown: (_view, event) => event.key === 'Enter',
       attributes: {
+        // A ring here (rather than just relying on the wrapper's
+        // focus-within) is skipped: the contenteditable sits flush under
+        // the toolbar with no visual gap, and a ring's rounded corners on
+        // an inner element not matching the wrapper's own rounding is a
+        // real risk of an ugly seam that can't be checked without a
+        // browser. The wrapper's existing focus-within ring already
+        // provides a visible indicator; only the aria-label is added here.
         class:
           'min-h-[3rem] px-4 py-3 font-serif text-base leading-relaxed text-charcoal focus:outline-none',
+        'aria-label': placeholder,
       },
     },
     onUpdate: ({ editor: instance }) => onChange(instance.getHTML()),

@@ -12,6 +12,16 @@ export const createReportHandler = asyncHandler(async (req, res) => {
   res.status(201).json({ success: true, message: 'Report submitted' });
 });
 
+export const createGalleryReportHandler = asyncHandler(async (req, res) => {
+  const { collaborationId, reason, details } = req.body;
+  if (!collaborationId) {
+    throw new ApiError(400, 'collaborationId is required');
+  }
+
+  await moderationService.reportGalleryContent(req.user.id, collaborationId, { reason, details });
+  res.status(201).json({ success: true, message: 'Report submitted' });
+});
+
 export const createBlockHandler = asyncHandler(async (req, res) => {
   const { collaborationId } = req.body;
   if (!collaborationId) {

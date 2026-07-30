@@ -29,7 +29,7 @@ export function TurnComposer({ onSubmit, placeholder = 'Continue the page…' })
   return (
     <form onSubmit={handleSubmit} className="flex flex-col gap-3">
       <RichTextEditor value={content} onChange={setContent} placeholder={placeholder} />
-      {error && <p className="text-sm text-red-600">{error}</p>}
+      {error && <p role="alert" className="text-sm text-red-600">{error}</p>}
       <button
         type="submit"
         disabled={isSubmitting || isBlank(content)}

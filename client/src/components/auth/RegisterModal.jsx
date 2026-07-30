@@ -48,7 +48,9 @@ export function RegisterModal({ isOpen, onClose }) {
   return (
     <Modal isOpen={isOpen} onClose={onClose} title="Create account">
       <form onSubmit={handleSubmit} className="space-y-3">
+        <label htmlFor="register-display-name" className="sr-only">Display name</label>
         <input
+          id="register-display-name"
           type="text"
           placeholder="Display name"
           value={displayName}
@@ -56,7 +58,9 @@ export function RegisterModal({ isOpen, onClose }) {
           required
           className={inputClasses}
         />
+        <label htmlFor="register-email" className="sr-only">Email</label>
         <input
+          id="register-email"
           type="email"
           placeholder="Email"
           value={email}
@@ -64,7 +68,9 @@ export function RegisterModal({ isOpen, onClose }) {
           required
           className={inputClasses}
         />
+        <label htmlFor="register-password" className="sr-only">Password (min 8 characters)</label>
         <input
+          id="register-password"
           type="password"
           placeholder="Password (min 8 characters)"
           value={password}
@@ -79,8 +85,8 @@ export function RegisterModal({ isOpen, onClose }) {
           onExpire={handleCaptchaReset}
           onError={handleCaptchaReset}
         />
-        {error && <p className="text-sm text-red-600">{error}</p>}
-        {message && <p className="text-sm text-indigo-dark">{message}</p>}
+        {error && <p role="alert" className="text-sm text-red-600">{error}</p>}
+        {message && <p role="status" className="text-sm text-indigo-dark">{message}</p>}
         <button
           type="submit"
           disabled={isSubmitting || !captchaToken}
@@ -90,11 +96,11 @@ export function RegisterModal({ isOpen, onClose }) {
         </button>
         <p className="text-center text-xs text-charcoal/40">
           By signing up, you agree to Pairagraph's{' '}
-          <Link to="/terms" className="underline decoration-charcoal/20 underline-offset-4 hover:text-charcoal/60">
+          <Link to="/terms" className="underline decoration-charcoal/20 underline-offset-4 hover:text-charcoal/70">
             Terms
           </Link>{' '}
           and{' '}
-          <Link to="/privacy" className="underline decoration-charcoal/20 underline-offset-4 hover:text-charcoal/60">
+          <Link to="/privacy" className="underline decoration-charcoal/20 underline-offset-4 hover:text-charcoal/70">
             Privacy Policy
           </Link>
           .

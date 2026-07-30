@@ -110,7 +110,7 @@ export function CollaborationsPage() {
                 type="button"
                 onClick={handleLoadMorePast}
                 disabled={isLoadingMorePast}
-                className="self-center rounded-full border border-charcoal/15 px-5 py-2 text-sm text-charcoal/60 transition hover:border-indigo/40 hover:text-charcoal disabled:opacity-60"
+                className="self-center rounded-full border border-charcoal/15 px-5 py-2 text-sm text-charcoal/70 transition hover:border-indigo/40 hover:text-charcoal disabled:opacity-60"
               >
                 {isLoadingMorePast ? 'Loading…' : 'Load more'}
               </button>
