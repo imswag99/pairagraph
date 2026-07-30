@@ -1,23 +1,20 @@
 import { THEME_OPTIONS } from '../../constants/themes.js';
 
+// A dropdown rather than a pill row like WritingTypePicker — 6 options
+// wrapped unpredictably in the narrow Quick Match / Invite cards, and a
+// select stays compact and orderly regardless of container width.
 export function ThemePicker({ value, onChange }) {
   return (
-    <div className="flex flex-wrap gap-2">
+    <select
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      className="w-full rounded-lg border border-charcoal/15 bg-white/70 px-3 py-2 text-sm text-charcoal transition focus:border-indigo focus:outline-none focus:ring-2 focus:ring-indigo/15"
+    >
       {THEME_OPTIONS.map((option) => (
-        <button
-          key={option.value}
-          type="button"
-          onClick={() => onChange(option.value)}
-          aria-pressed={value === option.value}
-          className={`rounded-full border px-4 py-1.5 text-sm transition ${
-            value === option.value
-              ? 'border-indigo bg-indigo text-paper'
-              : 'border-charcoal/15 text-charcoal/60 hover:border-indigo/50 hover:text-charcoal'
-          }`}
-        >
+        <option key={option.value} value={option.value}>
           {option.label}
-        </button>
+        </option>
       ))}
-    </div>
+    </select>
   );
 }

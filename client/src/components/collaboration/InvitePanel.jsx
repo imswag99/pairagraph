@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { inviteService } from '../../services/inviteService.js';
 import { WritingTypePicker } from './WritingTypePicker.jsx';
 import { ThemePicker } from './ThemePicker.jsx';
+import { PickerField } from './PickerField.jsx';
 
 function extractCode(input) {
   const trimmed = input.trim();
@@ -166,8 +167,14 @@ export function InvitePanel() {
         </div>
       ) : (
         <>
-          <WritingTypePicker value={writingType} onChange={setWritingType} />
-          <ThemePicker value={theme} onChange={setTheme} />
+          <div className="flex flex-col gap-3 rounded-lg bg-charcoal/5 p-3">
+            <PickerField label="Writing type">
+              <WritingTypePicker value={writingType} onChange={setWritingType} />
+            </PickerField>
+            <PickerField label="Theme">
+              <ThemePicker value={theme} onChange={setTheme} />
+            </PickerField>
+          </div>
           {error && <p className="text-sm text-red-600">{error}</p>}
           <button
             type="button"
