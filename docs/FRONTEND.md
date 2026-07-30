@@ -6,7 +6,7 @@ Everything built on the client: architecture, page-by-page behavior, real-time w
 
 ## 1. Architecture at a glance
 
-**Stack:** React 18, Vite, React Router v6, Tailwind CSS, Tiptap (rich text), Framer Motion, `socket.io-client`, `jsPDF`, Cloudflare Turnstile (CAPTCHA), Sentry (`@sentry/react`, error tracking only).
+**Stack:** React 18, Vite, React Router v7, Tailwind CSS, Tiptap (rich text), Framer Motion, `socket.io-client`, `jsPDF`, Cloudflare Turnstile (CAPTCHA), Sentry (`@sentry/react`, error tracking only).
 
 **State management:** plain React Context + `useState`/`useEffect` — no Redux, Zustand, or React Query, by design. `AuthContext` is the only app-wide context; everything else is local component state plus a thin `services/*.js` layer of one-line `fetch` wrappers per domain (`authService`, `collaborationService`, `chatService`, `inviteService`, `matchmakingService`, `leaderboardService`), all routed through a single `services/api.js` that adds `credentials: 'include'` and unwraps `{success, message, data}` into a thrown `Error` on failure.
 
@@ -218,7 +218,7 @@ Semantic landmarks (`<header>`, `<main>`, `<nav>`) were already in place. A firs
 
 **What:** Vitest + React Testing Library, added to close the gap `KNOWN_ISSUES.md` #9 tracked ("frontend has none [tests]") — a deliberately-scoped first slice, not exhaustive coverage of every component in the app.
 
-**Why Vitest 3, not the latest major:** `vitest@4` declares a hard peer requirement on Vite 6/7/8; this project is still on Vite 5 on purpose (the Vite 5→8 upgrade is one of three dependency CVE fixes explicitly deferred as its own separate migration — see `KNOWN_ISSUES.md` #7). Vitest 3.2.7 depends on `vite@^5.0.0 || ^6.0.0 || ^7.0.0-0` as a regular dependency (not a peer), so it installs its own compatible copy without forcing the project's own Vite version — pinned explicitly rather than letting `npm install vitest` resolve the incompatible latest major.
+**Why Vitest 3, not the latest major:** `vitest@4` declares a hard peer requirement on Vite 6/7/8; Vitest 3.2.7 depends on `vite@^5.0.0 || ^6.0.0 || ^7.0.0-0` as a regular dependency (not a peer). Vite itself was later bumped 5.3.1 → 7.3.6 to fix the esbuild CVEs (`KNOWN_ISSUES.md` #7), deliberately targeting v7 rather than v8 specifically so this Vitest 3 pin wouldn't need to change too — v8 would have forced `vitest` 3→4 as well, on top of a full Rollup→Rolldown bundler swap neither of which this project needed. `vitest@3.2.7`'s `vite` range already covers `7.3.6` (verified via semver), so it kept working across the Vite bump with zero changes.
 
 **Config:** a `test` block added directly to the existing `vite.config.js` (`environment: 'jsdom'`, `globals: true`, `setupFiles: './src/test/setup.js'`) rather than a separate `vitest.config.js` — one config file. `src/test/setup.js` just registers `@testing-library/jest-dom`'s matchers (`toBeInTheDocument()` etc.). `npm test` runs `vitest run` (one-shot, not watch mode) for CI parity with the backend's `npm test`. `.github/workflows/client-tests.yml` mirrors `server-tests.yml`'s structure exactly (Node 22, `npm ci` then `npm test`) — no env vars needed, since every test mocks its network-dependent module rather than hitting a real backend.
 
