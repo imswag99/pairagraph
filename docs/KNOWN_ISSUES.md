@@ -2,7 +2,7 @@
 
 A single running list of what's deliberately left unfinished, in rough priority order. Check here before starting new work — some of these compound with new features (e.g. anything touching auth or CORS should re-check items 1-2 first).
 
-Last reviewed: 2026-07-30, after a systematic accessibility pass (contrast, keyboard/focus, form labeling).
+Last reviewed: 2026-07-30, after the react-router v6 → v7 CVE migration.
 
 ## Deployment-specific (only apply once live)
 
@@ -15,11 +15,11 @@ Last reviewed: 2026-07-30, after a systematic accessibility pass (contrast, keyb
 
 ## Dependency / security
 
-7. **Three open dependency CVEs** (was four — removing `nodemailer` when email moved to an HTTP API cleared its high-severity CVE as a side effect), each needs a breaking major-version bump:
-   - `react-router` / `react-router-dom` — moderate, no fix in the 6.x line, needs v6 → v7
+7. **Two open dependency CVEs remain** (was three — `react-router-dom` bumped 6.24 → 7.18.2 fixed the open-redirect and `deserializeErrors()` constructor-injection advisories; verified via `npm audit`, the full test suite, and a production build):
    - Vite / esbuild — moderate-high, dev-server only, needs v5 → v8
    - transitive `uuid`/`gaxios` issue via `google-auth-library` — fixing risks breaking Google Sign-In
-   All investigated and consciously deferred as separate migration tasks. Free to fix, just real work with real risk of breakage — do one at a time, not bundled with unrelated changes.
+   Both investigated and consciously deferred as separate migration tasks. Free to fix, just real work with real risk of breakage — do one at a time, not bundled with unrelated changes.
+   - Aside: `npm audit` now also flags a *new* high-severity `react-router` advisory (`GHSA-qwww-vcr4-c8h2`, fixed at the base `react-router` package's 8.3.0). Confirmed via the advisory text that it **only affects apps using React Router's unstable RSC (React Server Components) mode with server actions** — this app is a plain client-side SPA (`BrowserRouter` + declarative `Routes`/`Route`, no loaders/actions/RSC), so it isn't exposed. It also can't be fixed yet regardless: `react-router-dom` (what this app imports) is frozen at 7.18.2 pending an upstream package merge into `react-router` v8 — there is no `react-router-dom@8.x` to move to. Noise, not a real gap; revisit once `react-router-dom` itself ships a v8.
 8. **A ban doesn't take effect on an already-issued access token until it naturally expires** (≤15 min). Login and token refresh both reject a banned account outright, and `blockInactiveParticipant` closes the gap on the specific writer-action endpoints (Quick Match, invite create/redeem, turn submission, completion response, chat send), but `requireAuth` itself never queries the database — so a banned user's current token still passes on routes that only require plain auth (e.g. reading history) until it expires. Fixing this fully means a DB lookup on every authenticated request app-wide; not worth it to shrink an already-small, self-expiring window.
 
 ## Testing / observability
