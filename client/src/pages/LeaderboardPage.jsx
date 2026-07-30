@@ -4,11 +4,61 @@ import { useAuth } from '../context/AuthContext.jsx';
 import { AppShell } from '../components/layout/AppShell.jsx';
 import { leaderboardService } from '../services/leaderboardService.js';
 import { LeaderboardRowSkeleton } from '../components/Skeleton.jsx';
+import { BADGES, BADGE_ORDER } from '../constants/badges.js';
 
 const RANGE_LABEL = {
   week: 'This week',
+  month: 'This month',
   all: 'All time',
 };
+
+function StatsPanel({ currentUser }) {
+  const earned = new Set(currentUser.badges ?? []);
+  return (
+    <div className="flex flex-col gap-4 rounded-xl border border-charcoal/10 bg-white/50 px-5 py-4">
+      <div className="flex flex-wrap items-center gap-x-6 gap-y-2 text-sm">
+        <span className="text-charcoal/70">
+          <span className="font-medium text-charcoal">{currentUser.totalCompletions ?? 0}</span>{' '}
+          completed
+        </span>
+        <span className="text-charcoal/70">
+          <span className="font-medium text-charcoal">{currentUser.currentStreak ?? 0}</span> day
+          streak
+          {currentUser.longestStreak > 0 && (
+            <span className="text-charcoal/40"> (best {currentUser.longestStreak})</span>
+          )}
+        </span>
+        <span className="text-charcoal/40">
+          {earned.size}/{BADGE_ORDER.length} badges earned
+        </span>
+      </div>
+
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4">
+        {BADGE_ORDER.map((id) => {
+          const isEarned = earned.has(id);
+          const { label, description } = BADGES[id];
+          return (
+            <div
+              key={id}
+              className={`rounded-lg border px-3 py-2 ${
+                isEarned
+                  ? 'border-indigo/30 bg-indigo-tint'
+                  : 'border-dashed border-charcoal/15 bg-transparent opacity-60'
+              }`}
+            >
+              <p
+                className={`text-xs font-medium ${isEarned ? 'text-indigo-dark' : 'text-charcoal/50'}`}
+              >
+                {label}
+              </p>
+              <p className="mt-0.5 text-[11px] leading-snug text-charcoal/40">{description}</p>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
 
 function RangeToggle({ range, onChange }) {
   return (
@@ -95,6 +145,8 @@ export function LeaderboardPage() {
           Finishing a collaboration together earns both writers points.
         </p>
       </div>
+
+      <StatsPanel currentUser={currentUser} />
 
       {error ? (
         <p className="text-sm text-red-600">{error}</p>

@@ -28,7 +28,81 @@ function toSafeUser(user) {
     isEmailVerified: user.isEmailVerified,
     hasPassword: Boolean(user.passwordHash),
     role: user.role,
+    totalCompletions: user.totalCompletions,
+    storyCompletions: user.storyCompletions,
+    poemCompletions: user.poemCompletions,
+    currentStreak: user.currentStreak,
+    longestStreak: user.longestStreak,
+    badges: user.badges,
   };
+}
+
+const COMPLETION_MILESTONES = {
+  first_completion: 1,
+  ten_completions: 10,
+  twentyfive_completions: 25,
+  fifty_completions: 50,
+};
+
+const STREAK_MILESTONES = {
+  streak_3: 3,
+  streak_7: 7,
+  streak_14: 14,
+  streak_30: 30,
+};
+
+const GENRE_SPECIALIST_THRESHOLD = 10;
+const SOCIAL_BUTTERFLY_PARTNER_THRESHOLD = 5;
+const MARATHON_WRITER_TURN_THRESHOLD = 15;
+
+function startOfUtcDay(date) {
+  return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
+}
+
+// Called once per participant, right alongside awardCompletionPoints, when a
+// collaboration completes. Tracks streaks/badges as denormalized counters on
+// User rather than deriving them from the leaderboard's PointsEntry ledger,
+// so this stays entirely within the auth domain's own model.
+export async function recordCompletionActivity(userId, { writingType, partnerId, turnCount = 0 }) {
+  const user = await User.findById(userId);
+  if (!user) return null;
+
+  user.totalCompletions += 1;
+  if (writingType === 'story') user.storyCompletions += 1;
+  if (writingType === 'poem') user.poemCompletions += 1;
+
+  if (partnerId && !user.partners.some((id) => String(id) === String(partnerId))) {
+    user.partners.push(partnerId);
+  }
+
+  const today = startOfUtcDay(new Date());
+  const lastActive = user.lastActiveDate ? startOfUtcDay(user.lastActiveDate) : null;
+  const dayDiff = lastActive ? Math.round((today - lastActive) / (24 * 60 * 60 * 1000)) : null;
+
+  if (dayDiff === 1) {
+    user.currentStreak += 1;
+  } else if (dayDiff !== 0) {
+    user.currentStreak = 1;
+  }
+  user.longestStreak = Math.max(user.longestStreak, user.currentStreak);
+  user.lastActiveDate = today;
+
+  const earned = new Set(user.badges);
+  for (const [badge, threshold] of Object.entries(COMPLETION_MILESTONES)) {
+    if (user.totalCompletions === threshold) earned.add(badge);
+  }
+  for (const [badge, threshold] of Object.entries(STREAK_MILESTONES)) {
+    if (user.currentStreak === threshold) earned.add(badge);
+  }
+  if (user.storyCompletions >= 1 && user.poemCompletions >= 1) earned.add('both_genres');
+  if (user.storyCompletions >= GENRE_SPECIALIST_THRESHOLD) earned.add('story_specialist');
+  if (user.poemCompletions >= GENRE_SPECIALIST_THRESHOLD) earned.add('poem_specialist');
+  if (user.partners.length >= SOCIAL_BUTTERFLY_PARTNER_THRESHOLD) earned.add('social_butterfly');
+  if (turnCount >= MARATHON_WRITER_TURN_THRESHOLD) earned.add('marathon_writer');
+  user.badges = Array.from(earned);
+
+  await user.save();
+  return user;
 }
 
 async function issueTokens(user) {

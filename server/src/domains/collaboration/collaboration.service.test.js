@@ -111,13 +111,21 @@ test('respondToCompletion: one approval keeps the collaboration in progress', as
   assert.equal(self.hasApproved, true);
 });
 
-test('respondToCompletion: both approving completes the collaboration', async () => {
+test('respondToCompletion: both approving completes the collaboration and records completion activity', async () => {
   const collab = await makeCollaboration();
 
   await collaborationService.respondToCompletion(userA._id, collab._id, true);
   const updated = await collaborationService.respondToCompletion(userB._id, collab._id, true);
 
   assert.equal(updated.status, 'completed');
+
+  const points = await PointsEntry.find({ collaboration: collab._id });
+  assert.equal(points.length, 2);
+
+  const refreshedA = await User.findById(userA._id);
+  const refreshedB = await User.findById(userB._id);
+  assert.ok(refreshedA.totalCompletions >= 1);
+  assert.ok(refreshedB.totalCompletions >= 1);
 });
 
 test('respondToCompletion: declining makes the collaboration private', async () => {

@@ -17,6 +17,14 @@ const userSchema = new mongoose.Schema(
     isBanned: { type: Boolean, default: false },
     blockedUsers: { type: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }], default: [] },
     role: { type: String, enum: ['user', 'admin'], default: 'user' },
+    totalCompletions: { type: Number, default: 0 },
+    storyCompletions: { type: Number, default: 0 },
+    poemCompletions: { type: Number, default: 0 },
+    currentStreak: { type: Number, default: 0 },
+    longestStreak: { type: Number, default: 0 },
+    lastActiveDate: { type: Date, default: null },
+    badges: { type: [String], default: [] },
+    partners: { type: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }], default: [] },
   },
   { timestamps: true }
 );

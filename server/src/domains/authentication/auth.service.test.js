@@ -273,6 +273,144 @@ test('changePassword succeeds with the correct current password and the new pass
   assert.equal(loggedIn.email, registerEmail);
 });
 
+test('recordCompletionActivity increments totals, starts a streak, and awards the first-completion badge', async () => {
+  const user = await User.create({
+    displayName: 'Streak Test',
+    email: email('streak-first'),
+    authProvider: 'local',
+    passwordHash: 'irrelevant',
+    isEmailVerified: true,
+  });
+
+  const updated = await authService.recordCompletionActivity(user._id, { writingType: 'story' });
+
+  assert.equal(updated.totalCompletions, 1);
+  assert.equal(updated.storyCompletions, 1);
+  assert.equal(updated.currentStreak, 1);
+  assert.equal(updated.longestStreak, 1);
+  assert.ok(updated.badges.includes('first_completion'));
+});
+
+test('recordCompletionActivity extends the streak on a consecutive day and resets it after a gap', async () => {
+  const user = await User.create({
+    displayName: 'Streak Test 2',
+    email: email('streak-gap'),
+    authProvider: 'local',
+    passwordHash: 'irrelevant',
+    isEmailVerified: true,
+    currentStreak: 3,
+    longestStreak: 3,
+    lastActiveDate: new Date(Date.now() - 24 * 60 * 60 * 1000),
+  });
+
+  const consecutive = await authService.recordCompletionActivity(user._id, { writingType: 'story' });
+  assert.equal(consecutive.currentStreak, 4);
+  assert.equal(consecutive.longestStreak, 4);
+
+  await User.findByIdAndUpdate(user._id, {
+    lastActiveDate: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000),
+  });
+  const afterGap = await authService.recordCompletionActivity(user._id, { writingType: 'story' });
+  assert.equal(afterGap.currentStreak, 1);
+  assert.equal(afterGap.longestStreak, 4, 'longest streak is preserved after a reset');
+});
+
+test('recordCompletionActivity awards both_genres and the genre-specialist badges at their thresholds', async () => {
+  const user = await User.create({
+    displayName: 'Genre Test',
+    email: email('both-genres'),
+    authProvider: 'local',
+    passwordHash: 'irrelevant',
+    isEmailVerified: true,
+    storyCompletions: 9,
+  });
+
+  const afterStory = await authService.recordCompletionActivity(user._id, { writingType: 'story' });
+  assert.ok(!afterStory.badges.includes('both_genres'));
+  assert.ok(afterStory.badges.includes('story_specialist'), 'story_specialist unlocks at 10 stories');
+
+  const afterPoem = await authService.recordCompletionActivity(user._id, { writingType: 'poem' });
+  assert.ok(afterPoem.badges.includes('both_genres'));
+  assert.ok(!afterPoem.badges.includes('poem_specialist'), 'only 1 poem so far, not 10');
+});
+
+test('recordCompletionActivity awards completion and streak milestone badges at their thresholds', async () => {
+  const user = await User.create({
+    displayName: 'Milestone Test',
+    email: email('milestones'),
+    authProvider: 'local',
+    passwordHash: 'irrelevant',
+    isEmailVerified: true,
+    totalCompletions: 9,
+    currentStreak: 6,
+    longestStreak: 6,
+    lastActiveDate: new Date(Date.now() - 24 * 60 * 60 * 1000),
+  });
+
+  const updated = await authService.recordCompletionActivity(user._id, { writingType: 'story' });
+  assert.equal(updated.totalCompletions, 10);
+  assert.equal(updated.currentStreak, 7);
+  assert.ok(updated.badges.includes('ten_completions'));
+  assert.ok(updated.badges.includes('streak_7'));
+  assert.ok(!updated.badges.includes('twentyfive_completions'));
+  assert.ok(!updated.badges.includes('streak_14'));
+});
+
+test('recordCompletionActivity awards social_butterfly after 5 distinct partners', async () => {
+  const user = await User.create({
+    displayName: 'Social Test',
+    email: email('social-butterfly'),
+    authProvider: 'local',
+    passwordHash: 'irrelevant',
+    isEmailVerified: true,
+  });
+  const partnerIds = [
+    new mongoose.Types.ObjectId(),
+    new mongoose.Types.ObjectId(),
+    new mongoose.Types.ObjectId(),
+    new mongoose.Types.ObjectId(),
+  ];
+
+  for (const partnerId of partnerIds) {
+    const updated = await authService.recordCompletionActivity(user._id, {
+      writingType: 'story',
+      partnerId,
+    });
+    assert.ok(!updated.badges.includes('social_butterfly'));
+  }
+
+  // A repeat partner must not count toward the distinct-partner threshold.
+  await authService.recordCompletionActivity(user._id, { writingType: 'story', partnerId: partnerIds[0] });
+
+  const withFifthPartner = await authService.recordCompletionActivity(user._id, {
+    writingType: 'story',
+    partnerId: new mongoose.Types.ObjectId(),
+  });
+  assert.ok(withFifthPartner.badges.includes('social_butterfly'));
+});
+
+test('recordCompletionActivity awards marathon_writer when a single turn count meets the threshold', async () => {
+  const user = await User.create({
+    displayName: 'Marathon Test',
+    email: email('marathon-writer'),
+    authProvider: 'local',
+    passwordHash: 'irrelevant',
+    isEmailVerified: true,
+  });
+
+  const short = await authService.recordCompletionActivity(user._id, {
+    writingType: 'story',
+    turnCount: 3,
+  });
+  assert.ok(!short.badges.includes('marathon_writer'));
+
+  const long = await authService.recordCompletionActivity(user._id, {
+    writingType: 'story',
+    turnCount: 15,
+  });
+  assert.ok(long.badges.includes('marathon_writer'));
+});
+
 test('deleteAccount anonymizes the user record', async () => {
   const registerEmail = email('delete-me');
   await authService.register({

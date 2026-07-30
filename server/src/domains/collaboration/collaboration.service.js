@@ -2,6 +2,7 @@ import { Collaboration } from './collaboration.model.js';
 import { ApiError } from '../../utils/ApiError.js';
 import { getIO } from '../../sockets/index.js';
 import { awardCompletionPoints } from '../leaderboard/leaderboard.service.js';
+import { recordCompletionActivity } from '../authentication/auth.service.js';
 
 const PARTICIPANT_POPULATE = { path: 'participants.user', select: 'displayName' };
 const TURN_OWNER_POPULATE = { path: 'turnOwner', select: 'displayName' };
@@ -152,10 +153,17 @@ export async function respondToCompletion(userId, collaborationId, approve) {
   await collaboration.save();
 
   if (justCompleted) {
-    await awardCompletionPoints(
-      collaboration._id,
-      collaboration.participants.map((p) => p.user)
-    );
+    await awardCompletionPoints(collaboration);
+    for (const participant of collaboration.participants) {
+      const turnCount = collaboration.entries.filter(
+        (entry) => String(entry.author) === String(participant.user)
+      ).length;
+      await recordCompletionActivity(participant.user, {
+        writingType: collaboration.writingType,
+        partnerId: getOtherParticipant(collaboration, participant.user).user,
+        turnCount,
+      });
+    }
   }
 
   await collaboration.populate([PARTICIPANT_POPULATE, TURN_OWNER_POPULATE, ENTRY_AUTHOR_POPULATE]);

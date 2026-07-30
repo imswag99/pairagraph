@@ -9,6 +9,7 @@ import { PenMark } from '../components/PenMark.jsx';
 import { AppShell } from '../components/layout/AppShell.jsx';
 import { QuickMatchPanel } from '../components/collaboration/QuickMatchPanel.jsx';
 import { InvitePanel } from '../components/collaboration/InvitePanel.jsx';
+import { BADGES, BADGE_ORDER } from '../constants/badges.js';
 
 function getGreeting() {
   const hour = new Date().getHours();
@@ -158,6 +159,29 @@ function DashboardHero({ displayName }) {
   );
 }
 
+function BadgeProgressTeaser({ currentUser }) {
+  const earned = new Set(currentUser.badges ?? []);
+  const nextBadgeId = BADGE_ORDER.find((id) => !earned.has(id));
+
+  return (
+    <Link
+      to="/leaderboard"
+      className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-full border border-charcoal/10 bg-white/50 px-4 py-2 text-sm transition hover:border-indigo/30 hover:bg-indigo-tint/40"
+    >
+      <span className="font-medium text-indigo-dark">
+        {earned.size}/{BADGE_ORDER.length} badges
+      </span>
+      {nextBadgeId && (
+        <span className="text-charcoal/50">
+          Next up: <span className="font-medium text-charcoal/70">{BADGES[nextBadgeId].label}</span>
+          {' — '}
+          {BADGES[nextBadgeId].description}
+        </span>
+      )}
+    </Link>
+  );
+}
+
 function Dashboard({ currentUser, logout }) {
   if (currentUser.role === 'admin') {
     return <Navigate to="/admin" replace />;
@@ -166,6 +190,8 @@ function Dashboard({ currentUser, logout }) {
   return (
     <AppShell currentUser={currentUser} logout={logout}>
       <DashboardHero displayName={currentUser.displayName} />
+
+      <BadgeProgressTeaser currentUser={currentUser} />
 
       <section className="flex flex-col gap-3">
         <h2 className="font-serif text-lg text-charcoal">Start something new</h2>

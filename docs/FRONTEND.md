@@ -134,7 +134,8 @@ Both use the shared `CollaborationCard` (also used standalone nowhere else now �
 
 - **`QuickMatchPanel`**: join/cancel the matchmaking queue, polls its own status once on mount to resume a "waiting…" state after a refresh.
 - **`InvitePanel`**: a segmented Create/Join control (`aria-pressed` reflects the active tab). Join accepts either a bare invite code or a full pasted URL (extracts the last path segment).
-- **`LeaderboardPage`**: a This week/All time toggle (`aria-pressed`), a ranked table highlighting the current user's row, and a skeleton (3 placeholder rows) while loading. No pagination — capped at the top 50 server-side, which is plenty for a table this shape.
+- **`LeaderboardPage`**: a This week/This month/All time toggle (`aria-pressed`), a ranked table highlighting the current user's row, and a skeleton (3 placeholder rows) while loading. No pagination — capped at the top 50 server-side, which is plenty for a table this shape. A `StatsPanel` above the table reads streak/completion/badge fields straight off `currentUser` (already returned by every auth endpoint via the backend's `toSafeUser`, see `BACKEND.md` §8) — no extra request needed to show a user their own stats. The panel renders the **full badge catalog** (`client/src/constants/badges.js`, shared with the Homepage teaser below), not just earned ones — locked badges show dashed/muted with their unlock condition, so the game element is discoverable before a user has earned anything, not just a trophy case after the fact.
+- **Badge progress teaser (`HomePage.jsx`'s `BadgeProgressTeaser`)**: a single-line pill on the writer's dashboard, right under the hero, showing `n/13 badges` and a "Next up: <name> — <how to earn it>" nudge, linking to `/leaderboard`. Deliberately kept to one line rather than the full gallery — the dashboard's job is still "get the user writing," so this is a hint of the game layer, not the game layer itself.
 
 ---
 
