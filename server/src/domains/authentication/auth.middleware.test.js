@@ -3,7 +3,8 @@ import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import mongoose from 'mongoose';
 import { User } from './auth.model.js';
-import { blockInactiveParticipant } from './auth.middleware.js';
+import { requireAuth, requireAdmin, blockInactiveParticipant } from './auth.middleware.js';
+import { generateAccessToken } from '../../utils/tokens.js';
 
 const RUN_ID = `auth-middleware-test-${Date.now()}`;
 const email = (suffix) => `${RUN_ID}-${suffix}@example.com`;
@@ -47,27 +48,68 @@ after(async () => {
   await mongoose.connection.close();
 });
 
-function callMiddleware(userId) {
+function callRequireAuth(accessToken) {
   return new Promise((resolve, reject) => {
-    const req = { user: { id: userId } };
-    blockInactiveParticipant(req, {}, (err) => (err ? reject(err) : resolve()));
+    const req = { cookies: accessToken ? { accessToken } : {} };
+    requireAuth(req, {}, (err) => (err ? reject(err) : resolve(req)));
   });
 }
 
-test('blockInactiveParticipant lets an active, non-admin user through', async () => {
-  await assert.doesNotReject(() => callMiddleware(activeUser._id));
+function callSyncMiddleware(fn, role) {
+  return new Promise((resolve, reject) => {
+    const req = { user: { role } };
+    fn(req, {}, (err) => (err ? reject(err) : resolve()));
+  });
+}
+
+test('requireAuth rejects a request with no access token cookie', async () => {
+  await assert.rejects(() => callRequireAuth(undefined), (err) => err.statusCode === 401);
 });
 
-test('blockInactiveParticipant rejects a banned user', async () => {
+test('requireAuth rejects a garbage/invalid token', async () => {
+  await assert.rejects(() => callRequireAuth('not-a-real-token'), (err) => err.statusCode === 401);
+});
+
+test('requireAuth lets an active user through and attaches id + role', async () => {
+  const req = await callRequireAuth(generateAccessToken(activeUser._id));
+  assert.equal(req.user.id, activeUser._id.toString());
+  assert.equal(req.user.role, 'user');
+});
+
+test('requireAuth attaches an admin role for an admin user', async () => {
+  const req = await callRequireAuth(generateAccessToken(adminUser._id));
+  assert.equal(req.user.role, 'admin');
+});
+
+// This is the actual ban-token-gap fix: a banned user's access token is
+// otherwise still cryptographically valid (it isn't revoked on ban, only
+// refresh tokens are), so this must be checked against the DB on every
+// request rather than trusted from the token payload alone.
+test('requireAuth rejects an already-issued token belonging to a since-banned user', async () => {
   await assert.rejects(
-    () => callMiddleware(bannedUser._id),
+    () => callRequireAuth(generateAccessToken(bannedUser._id)),
     (err) => err.statusCode === 403
   );
 });
 
+test('requireAdmin lets an admin through', async () => {
+  await assert.doesNotReject(() => callSyncMiddleware(requireAdmin, 'admin'));
+});
+
+test('requireAdmin rejects a non-admin', async () => {
+  await assert.rejects(
+    () => callSyncMiddleware(requireAdmin, 'user'),
+    (err) => err.statusCode === 403
+  );
+});
+
+test('blockInactiveParticipant lets a non-admin through', async () => {
+  await assert.doesNotReject(() => callSyncMiddleware(blockInactiveParticipant, 'user'));
+});
+
 test('blockInactiveParticipant rejects an admin', async () => {
   await assert.rejects(
-    () => callMiddleware(adminUser._id),
+    () => callSyncMiddleware(blockInactiveParticipant, 'admin'),
     (err) => err.statusCode === 403
   );
 });

@@ -84,7 +84,7 @@ npm run dev       # http://localhost:5173
 
 ## Testing
 
-The backend has an automated test suite (`server/npm test`, 115 tests) covering auth, the turn-based writing rules, matchmaking, invites, the leaderboard, report/block moderation, admin user management, and the public gallery — it runs in CI on every push and pull request (see `.github/workflows/server-tests.yml`). The frontend has a first slice of automated tests (`client/npm test`, 15 tests — session restore, the CAPTCHA single-use-token regression, and the core writing-loop UI), also in CI (`.github/workflows/client-tests.yml`); it's not yet comprehensive — see `docs/FRONTEND.md` for what's covered and what isn't.
+The backend has an automated test suite (`server/npm test`, 121 tests) covering auth, the turn-based writing rules, matchmaking, invites, the leaderboard, report/block moderation, admin user management, and the public gallery — it runs in CI on every push and pull request (see `.github/workflows/server-tests.yml`). The frontend has a first slice of automated tests (`client/npm test`, 15 tests — session restore, the CAPTCHA single-use-token regression, and the core writing-loop UI), also in CI (`.github/workflows/client-tests.yml`); it's not yet comprehensive — see `docs/FRONTEND.md` for what's covered and what isn't.
 
 ## License
 

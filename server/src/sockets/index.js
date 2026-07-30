@@ -1,6 +1,7 @@
 import { Server } from 'socket.io';
 import { verifyAccessToken } from '../utils/tokens.js';
 import { Collaboration } from '../domains/collaboration/collaboration.model.js';
+import { User } from '../domains/authentication/auth.model.js';
 
 let io;
 
@@ -18,18 +19,30 @@ export function initIO(httpServer) {
     cors: { origin: process.env.CLIENT_URL, credentials: true },
   });
 
-  io.use((socket, next) => {
+  // Same fresh-ban-check reasoning as requireAuth (auth.middleware.js) — a
+  // socket connection made with an already-issued token shouldn't outlive a
+  // ban either, even though the only thing it currently gates is the
+  // chat:typing broadcast (actual chat messages go through the REST endpoint,
+  // already covered by blockInactiveParticipant).
+  io.use(async (socket, next) => {
     const token = parseCookie(socket.handshake.headers.cookie, 'accessToken');
     if (!token) {
       return next(new Error('Authentication required'));
     }
+    let decoded;
     try {
-      const decoded = verifyAccessToken(token);
-      socket.userId = decoded.sub;
-      next();
+      decoded = verifyAccessToken(token);
     } catch {
-      next(new Error('Invalid or expired access token'));
+      return next(new Error('Invalid or expired access token'));
     }
+
+    const user = await User.findById(decoded.sub).select('isBanned');
+    if (user?.isBanned) {
+      return next(new Error('Your account has been suspended.'));
+    }
+
+    socket.userId = decoded.sub;
+    next();
   });
 
   io.on('connection', (socket) => {
