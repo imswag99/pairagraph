@@ -2,10 +2,12 @@ import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { matchmakingService } from '../../services/matchmakingService.js';
 import { WritingTypePicker } from './WritingTypePicker.jsx';
+import { ThemePicker } from './ThemePicker.jsx';
 
 export function QuickMatchPanel() {
   const navigate = useNavigate();
   const [writingType, setWritingType] = useState('story');
+  const [theme, setTheme] = useState('classic');
   const [isWaiting, setIsWaiting] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState('');
@@ -15,6 +17,7 @@ export function QuickMatchPanel() {
       if (data.waiting) {
         setIsWaiting(true);
         setWritingType(data.writingType);
+        if (data.theme) setTheme(data.theme);
       }
     });
   }, []);
@@ -23,7 +26,7 @@ export function QuickMatchPanel() {
     setError('');
     setIsSubmitting(true);
     try {
-      const { data } = await matchmakingService.join(writingType);
+      const { data } = await matchmakingService.join(writingType, theme);
       if (data.matched) {
         navigate(`/collaborations/${data.collaborationId}`);
       } else {
@@ -72,6 +75,7 @@ export function QuickMatchPanel() {
       ) : (
         <>
           <WritingTypePicker value={writingType} onChange={setWritingType} />
+          <ThemePicker value={theme} onChange={setTheme} />
           {error && <p className="text-sm text-red-600">{error}</p>}
           <button
             type="button"

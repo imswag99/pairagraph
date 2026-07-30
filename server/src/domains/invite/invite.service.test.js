@@ -79,6 +79,23 @@ test('redeemInvite succeeds and creates a collaboration between creator and rede
   assert.equal(updatedInvite.status, 'redeemed');
 });
 
+test('createInvite stores the creator-chosen theme, defaulting to classic', async () => {
+  const withDefault = await inviteService.createInvite(creator._id, 'story');
+  assert.equal(withDefault.theme, 'classic');
+
+  const themed = await inviteService.createInvite(creator._id, 'story', 'sci-fi');
+  assert.equal(themed.theme, 'sci-fi');
+});
+
+test('redeemInvite carries the creator\'s theme through untouched — the redeemer has no say', async () => {
+  const invite = await inviteService.createInvite(creator._id, 'story', 'fantasy');
+
+  const result = await inviteService.redeemInvite(redeemer._id, invite.code);
+
+  const collab = await Collaboration.findById(result.collaborationId);
+  assert.equal(collab.theme, 'fantasy');
+});
+
 test('redeemInvite rejects a code that was already redeemed', async () => {
   const invite = await inviteService.createInvite(creator._id, 'story');
   await inviteService.redeemInvite(redeemer._id, invite.code);

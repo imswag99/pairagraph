@@ -12,4 +12,7 @@ export const collaborationService = {
   submitTurn: (id, content) => api.post(`/collaborations/${id}/turns`, { content }),
   respondToCompletion: (id, approve) => api.post(`/collaborations/${id}/completion`, { approve }),
   leave: (id) => api.post(`/collaborations/${id}/leave`),
+  setPublished: (id, published) => api.patch(`/collaborations/${id}/publish`, { published }),
+  setPublishConsent: (id, consent) =>
+    api.patch(`/collaborations/${id}/publish-consent`, { consent }),
 };

@@ -45,3 +45,29 @@ export const leaveHandler = asyncHandler(async (req, res) => {
   const collaboration = await collaborationService.leave(req.user.id, req.params.id);
   res.json({ success: true, data: { collaboration } });
 });
+
+export const setPublishedHandler = asyncHandler(async (req, res) => {
+  const { published } = req.body;
+  if (typeof published !== 'boolean') {
+    throw new ApiError(400, 'published must be a boolean');
+  }
+  const collaboration = await collaborationService.setGalleryPublished(
+    req.user.id,
+    req.params.id,
+    published
+  );
+  res.json({ success: true, data: { collaboration } });
+});
+
+export const setPublishConsentHandler = asyncHandler(async (req, res) => {
+  const { consent } = req.body;
+  if (typeof consent !== 'boolean') {
+    throw new ApiError(400, 'consent must be a boolean');
+  }
+  const collaboration = await collaborationService.setPublishConsent(
+    req.user.id,
+    req.params.id,
+    consent
+  );
+  res.json({ success: true, data: { collaboration } });
+});

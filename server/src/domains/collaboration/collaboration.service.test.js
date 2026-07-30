@@ -1,10 +1,11 @@
 import 'dotenv/config';
-import { test, before, after } from 'node:test';
+import { test, before, after, beforeEach, mock } from 'node:test';
 import assert from 'node:assert/strict';
 import mongoose from 'mongoose';
 import { User } from '../authentication/auth.model.js';
 import { Collaboration } from './collaboration.model.js';
 import { PointsEntry } from '../leaderboard/leaderboard.model.js';
+import { mailer } from '../../utils/mailer.js';
 import * as collaborationService from './collaboration.service.js';
 import { startTestSocket } from '../../testUtils/testSocket.js';
 
@@ -33,6 +34,10 @@ before(async () => {
   });
 });
 
+beforeEach(() => {
+  mock.method(mailer, 'sendYourTurnEmail', async () => {});
+});
+
 after(async () => {
   // respondToCompletion awards leaderboard points as a side effect of
   // completion, so the "both approve" test below leaves PointsEntry rows too.
@@ -43,11 +48,16 @@ after(async () => {
   await mongoose.connection.close();
 });
 
-async function makeCollaboration({ writingType = 'story', turnOwner = userA._id } = {}) {
+async function makeCollaboration({
+  writingType = 'story',
+  turnOwner = userA._id,
+  status = 'in_progress',
+} = {}) {
   return Collaboration.create({
     participants: [{ user: userA._id }, { user: userB._id }],
     writingType,
     turnOwner,
+    status,
   });
 }
 
@@ -100,6 +110,62 @@ test('submitTurn accepts valid content, flips the turn, and resets approvals', a
   assert.equal(updated.participants[0].hasApproved, null);
   assert.equal(updated.participants[1].hasApproved, null);
   assert.equal(updated.entries[0].author.displayName, 'Collab Alice');
+
+  // This turn flip also fires a fire-and-forget "your turn" notification —
+  // drain it before the test ends so it can't resolve late and leak an extra
+  // mock call into whichever test runs next (observed flake otherwise).
+  await flushNotificationQueue(1);
+});
+
+// The notification email is sent fire-and-forget (never blocks the turn
+// response) via a real DB lookup, so tests poll for the expected call count
+// instead of racing it with a fixed sleep — a fixed delay was observed to
+// flake under load (real MongoDB Atlas latency varies run to run).
+async function flushNotificationQueue(expectedCallCount) {
+  const deadline = Date.now() + 2000;
+  while (
+    mailer.sendYourTurnEmail.mock.calls.length < expectedCallCount &&
+    Date.now() < deadline
+  ) {
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
+}
+
+test('submitTurn notifies the new turn-owner by email and records the notification time', async () => {
+  const collab = await makeCollaboration({ turnOwner: userA._id });
+
+  const updated = await collaborationService.submitTurn(userA._id, collab._id, '<p>My turn.</p>');
+  await flushNotificationQueue(1);
+
+  assert.equal(mailer.sendYourTurnEmail.mock.calls.length, 1);
+  assert.equal(mailer.sendYourTurnEmail.mock.calls[0].arguments[0], userB.email);
+
+  const stored = await Collaboration.findById(updated._id);
+  const bobParticipant = stored.participants.find((p) => p.user.toString() === userB._id.toString());
+  assert.ok(bobParticipant.lastTurnNotifiedAt instanceof Date);
+});
+
+test('submitTurn does not re-notify the same user within the cooldown window', async () => {
+  const collab = await makeCollaboration({ turnOwner: userA._id });
+
+  await collaborationService.submitTurn(userA._id, collab._id, '<p>First.</p>');
+  await flushNotificationQueue(1);
+  assert.equal(mailer.sendYourTurnEmail.mock.calls.length, 1);
+
+  await collaborationService.submitTurn(userB._id, collab._id, '<p>Second.</p>');
+  await flushNotificationQueue(2);
+  // Bob's earlier notification already sent Alice's turn-notification eligibility
+  // aside — this call would notify Alice, not Bob, so it doesn't touch Bob's
+  // cooldown. Submit a third turn back to Bob within the cooldown window and
+  // confirm he isn't notified again. There's no call count to poll toward here
+  // (we're proving an absence), so give it a fixed grace window instead.
+  await collaborationService.submitTurn(userA._id, collab._id, '<p>Third.</p>');
+  await new Promise((resolve) => setTimeout(resolve, 300));
+
+  const callsForBob = mailer.sendYourTurnEmail.mock.calls.filter(
+    (call) => call.arguments[0] === userB.email
+  );
+  assert.equal(callsForBob.length, 1, 'Bob should only be notified once within the cooldown');
 });
 
 test('respondToCompletion: one approval keeps the collaboration in progress', async () => {
@@ -242,4 +308,37 @@ test('getTurnCount only counts in-progress collaborations where it is this user\
     status: 'in_progress',
   });
   assert.equal(stillOwesUserA, 1);
+});
+
+test('setGalleryPublished rejects a collaboration that is not completed', async () => {
+  const collab = await makeCollaboration({ status: 'in_progress' });
+
+  await assert.rejects(
+    () => collaborationService.setGalleryPublished(userA._id, collab._id, true),
+    (err) => err.statusCode === 409
+  );
+});
+
+test('setGalleryPublished lets either participant publish or unpublish unilaterally', async () => {
+  const collab = await makeCollaboration({ status: 'completed' });
+
+  const published = await collaborationService.setGalleryPublished(userA._id, collab._id, true);
+  assert.equal(published.isPublished, true);
+  assert.ok(published.publishedAt);
+
+  // Bob, not Alice, takes it back down — no requirement that the same
+  // participant who published it is the one who can unpublish it.
+  const unpublished = await collaborationService.setGalleryPublished(userB._id, collab._id, false);
+  assert.equal(unpublished.isPublished, false);
+});
+
+test('setPublishConsent only ever changes the caller\'s own participant subdocument', async () => {
+  const collab = await makeCollaboration({ status: 'completed' });
+
+  const updated = await collaborationService.setPublishConsent(userA._id, collab._id, true);
+  const alice = updated.participants.find((p) => p.user._id.toString() === userA._id.toString());
+  const bob = updated.participants.find((p) => p.user._id.toString() === userB._id.toString());
+
+  assert.equal(alice.hasConsentedToPublish, true);
+  assert.equal(bob.hasConsentedToPublish, false);
 });

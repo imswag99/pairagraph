@@ -2,7 +2,7 @@
 
 A single running list of what's deliberately left unfinished, in rough priority order. Check here before starting new work — some of these compound with new features (e.g. anything touching auth or CORS should re-check items 1-2 first).
 
-Last reviewed: 2026-07-29, after adding Sentry error tracking and a free uptime pinger.
+Last reviewed: 2026-07-30, after adding the public discovery gallery.
 
 ## Deployment-specific (only apply once live)
 
@@ -24,7 +24,7 @@ Last reviewed: 2026-07-29, after adding Sentry error tracking and a free uptime 
 
 ## Testing / observability
 
-9. **No frontend automated test coverage** — no Vitest/RTL, no Playwright. Backend has 83 passing tests in CI; frontend has none. The single biggest gap on the frontend side.
+9. **No frontend automated test coverage** — no Vitest/RTL, no Playwright. Backend has 111 passing tests in CI; frontend has none. The single biggest gap on the frontend side.
 10. **No real accessibility audit** beyond a manual icon-only-control pass — contrast ratios, keyboard tab order, and screen-reader flow through multi-step forms haven't been systematically checked.
 
 ## Scaling (irrelevant on a single free instance, but will matter if that changes)
@@ -37,6 +37,11 @@ Last reviewed: 2026-07-29, after adding Sentry error tracking and a free uptime 
 13. **Gemini's 20/day free-tier ceiling** for AI-generated keywords — a deliberate cost decision, not a limitation to fix. Falls back to a local keyword pool once exhausted.
 14. **`EMAIL_FROM` is a free Gmail address, not a verified custom domain.** On SendGrid this landed in Gmail Spam (Gmail treats unauthenticated `@gmail.com` senders as suspicious). On Brevo, the behavior is different: since the domain isn't DKIM-authenticated, **Brevo automatically substitutes it with its own authenticated subdomain** (observed: `pairagraph.app@gmail.com` → `pairagraph.app@11762822.brevosend.com`) to satisfy Gmail/Yahoo's sender-authentication rules (mandatory since Feb 2024) — this is what's actually landing emails in the inbox now. Trade-off: recipients see an unfamiliar `brevosend.com` address rather than the real one (display name "Pairagraph" still shows). Fixing this properly means authenticating a real owned domain with Brevo, which isn't free.
 15. **No "Sent with Brevo" branding observed on transactional emails** in practice, despite that being commonly described for Brevo's free plan — that branding appears to be specific to the marketing/campaigns product, not the transactional email API this project uses.
+16. **"Your turn" email notifications add real volume against Brevo's 300/day free cap**, unlike verification/reset emails (one-time events) — an active pair playing many rounds could otherwise generate one email per turn. Mitigated with a 4-hour cooldown per (user, collaboration) rather than per-turn sending (`collaboration.service.js`'s `submitTurn`), which bounds the worst case without new infrastructure. Revisit if usage grows enough to approach the daily cap before moving to a paid Brevo tier (planned once the app goes "official").
+
+## Moderation / safety
+
+17. **No visitor-facing "report this piece" button on the public gallery.** The existing `Report` model requires the reporter to be a participant in the reported collaboration (`findTargetParticipant`), which doesn't fit "a random visitor reports a published piece they had no part in" — reshaping that model was judged real scope, not part of the discovery feature's first pass. The current safety valve is admin-only: an admin can force-unpublish any piece (`PATCH /admin/collaborations/:id/unpublish`) regardless of who published it. Worth revisiting once the gallery has real traffic.
 
 ---
 

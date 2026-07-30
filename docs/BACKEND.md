@@ -17,7 +17,7 @@ Turn-based, two-person collaborative writing app. This document covers the backe
 | `*.controller.js` | Thin: parse `req`, call the service, shape the JSON response |
 | `*.routes.js` | Express `Router`, wires `requireAuth` + endpoints to controller functions |
 
-Domains: **authentication, collaboration, matchmaking, invite, ai, chat, leaderboard, moderation, admin**. Shared infrastructure lives outside the domains: `utils/` (ApiError, asyncHandler, tokens, mailer, logger, turnstile), `middleware/` (errorHandler), `sockets/` (Socket.IO setup), `testUtils/` (a throwaway Socket.IO server for tests that exercise services which broadcast).
+Domains: **authentication, collaboration, matchmaking, invite, ai, chat, leaderboard, moderation, admin, gallery**. Shared infrastructure lives outside the domains: `utils/` (ApiError, asyncHandler, tokens, mailer, logger, turnstile), `middleware/` (errorHandler), `sockets/` (Socket.IO setup), `testUtils/` (a throwaway Socket.IO server for tests that exercise services which broadcast).
 
 **Why this shape:** the project spec called for "thin controllers, business logic inside services" and domain-based organization so new features (e.g. chat, leaderboard) slot in without touching unrelated code. Every domain has been verified end-to-end against the real database, either via the automated test suite (§13) or live curl/socket scripts during development.
 
@@ -65,7 +65,7 @@ Domains: **authentication, collaboration, matchmaking, invite, ai, chat, leaderb
 
 **What:** the actual turn-based writing loop and completion approval.
 
-**Model (`Collaboration`):** `participants` (exactly 2, schema-validated), `writingType` (`story`/`poem`), `turnOwner`, `entries` (`{author, content, submittedAt}`), `keywords` (5 words), `status` (`in_progress`/`completed`/`private`/`left`), `leftBy` (set only when `status === 'left'`).
+**Model (`Collaboration`):** `participants` (exactly 2, schema-validated — each with `user`, `hasApproved`, `lastTurnNotifiedAt`, and `hasConsentedToPublish`), `writingType` (`story`/`poem`), `theme` (flavor only — see §6), `turnOwner`, `entries` (`{author, content, submittedAt}`), `keywords` (5 words), `status` (`in_progress`/`completed`/`private`/`left`), `leftBy` (set only when `status === 'left'`), `isPublished`/`publishedAt` (public gallery visibility — see §11).
 
 **Why this state machine:** the spec required turn-taking, immutable history, and mutual-approval completion, but left the edge cases undefined — these were resolved deliberately during design, not guessed:
 - Submitting a new turn **resets both participants' `hasApproved` to `null`** — prevents completing off a stale approval given before new content existed.
@@ -74,11 +74,13 @@ Domains: **authentication, collaboration, matchmaking, invite, ai, chat, leaderb
 - One-line-per-turn (poem) / one-paragraph-per-turn (story) is enforced server-side by counting `<p>` tags and rejecting any `<br>` in poem content — defense-in-depth against a client that bypasses the editor's own restriction (see the editor's Enter-key blocking, front-end side).
 - **`leave` (added for the moderation follow-up, §9)** sets `status:'left'` and records `leftBy` — deliberately a distinct value from `'private'` (mutual decline) so the UI can tell the two apart and say who actually left, rather than showing the same generic label for a polite disagreement and someone escaping harassment. Reuses the exact same "no longer in progress" guard `submitTurn`/`respondToCompletion` already had, so both are automatically rejected on a left collaboration with zero changes to either function.
 
-**Endpoints:** `GET /collaborations` (list mine, summarized, paginated + filterable), `GET /collaborations/turn-count` (count of `in_progress` collaborations where it's this user's turn — a dedicated lightweight endpoint for the nav badge, cheaper than fetching full collaboration data just to derive a number), `GET /collaborations/:id` (full detail, populated), `POST /collaborations/:id/turns`, `POST /collaborations/:id/completion`, `POST /collaborations/:id/leave`.
+**Endpoints:** `GET /collaborations` (list mine, summarized, paginated + filterable), `GET /collaborations/turn-count` (count of `in_progress` collaborations where it's this user's turn — a dedicated lightweight endpoint for the nav badge, cheaper than fetching full collaboration data just to derive a number), `GET /collaborations/:id` (full detail, populated), `POST /collaborations/:id/turns`, `POST /collaborations/:id/completion`, `POST /collaborations/:id/leave`, `PATCH /collaborations/:id/publish` and `PATCH /collaborations/:id/publish-consent` (gallery opt-in, §11).
 
 **Pagination:** `GET /collaborations?status=<comma-separated>&page=&limit=` — `status` filters (e.g. `in_progress`, or `completed,private` for "past"), defaults to `page=1&limit=10`. Returns `{collaborations, hasMore, total}` rather than a bare array; `hasMore` is computed from an actual `countDocuments`, not a "did we get a full page" heuristic, since the query is cheap enough to just count.
 
 **Real-time:** both `submitTurn` and `respondToCompletion` broadcast `collaboration:updated` (the full populated document) to both participants' socket rooms after saving, so neither side needs to refresh to see the other's move.
+
+**"It's your turn" email:** `submitTurn` also sends an email to the new turn-owner when `turnOwner` flips, via a new `mailer.sendYourTurnEmail`. There's no cron/queue infrastructure in this stack (the only scheduled-task precedent, the uptime pinger, is an external free service, not in-app code — see `KNOWN_ISSUES.md` #1), so rather than a delayed "notify once idle" job, the email is sent synchronously at handoff, gated by a **4-hour cooldown per (user, collaboration)** stored as `lastTurnNotifiedAt` on that participant's subdocument. This bounds the worst case — two people playing many fast rounds back-to-back — without needing any new infrastructure, and is scoped per-collaboration rather than globally per-user so someone with several concurrent partners still gets notified about each pairing independently. The recipient's email is fetched with a separate targeted `User.findById(id).select('email')` query rather than by adding `email` to `PARTICIPANT_POPULATE` — that populate feeds the collaboration payload both participants receive over the API, so adding email there would leak a writer's email address to their partner. The send itself is fire-and-forget (`.catch` logs via `logger.error`, matching the existing `sendPasswordResetEmail`/`sendGoogleAccountNoticeEmail` pattern in `auth.service.js`) so a slow or failed email never blocks the turn-submission response. See `KNOWN_ISSUES.md` for the Brevo-quota trade-off this introduces.
 
 ---
 
@@ -86,7 +88,9 @@ Domains: **authentication, collaboration, matchmaking, invite, ai, chat, leaderb
 
 **What:** "Quick Match" — pairs two users waiting for the same `writingType`.
 
-**How:** a `MatchQueueEntry` (`user` unique, `writingType`) is created when no waiting partner exists; `findOneAndDelete` atomically claims a waiting partner if one does; on a match, a `Collaboration` is created (random `turnOwner` — a deliberate, neutral choice) and the *other* (already-waiting) participant is notified via the `matchmaking:matched` Socket.IO event, since their HTTP request returned long before the match happened.
+**How:** a `MatchQueueEntry` (`user` unique, `writingType`, `theme`) is created when no waiting partner exists; `findOneAndDelete` atomically claims a waiting partner if one does; on a match, a `Collaboration` is created (random `turnOwner` — a deliberate, neutral choice) and the *other* (already-waiting) participant is notified via the `matchmaking:matched` Socket.IO event, since their HTTP request returned long before the match happened.
+
+**Theme resolution:** matching itself is still keyed on `writingType` only — adding `theme` to the match criteria would fragment the queue and slow down pairing for a purely cosmetic preference. Instead, when two differently-themed entries match, the resulting collaboration's `theme` is resolved with the same 50/50 coin flip already used for `turnOwner` (`Math.random() < 0.5 ? theme : partnerEntry.theme`) — consistent with how turn order is already randomly decided between two matched strangers rather than user-chosen.
 
 **Endpoints:** `POST/GET/DELETE /matchmaking/quick-match` (join / check status / cancel).
 
@@ -96,7 +100,7 @@ Domains: **authentication, collaboration, matchmaking, invite, ai, chat, leaderb
 
 **What:** the second way to start a collaboration — create a shareable link, someone else redeems it.
 
-**How:** `Invite` (`creator`, `writingType`, `code` — a random token reusing the same `generateRawToken` helper as email verification, `status`, `collaboration`). Redeeming validates the code is still `pending`, rejects self-redemption, creates the `Collaboration` (random `turnOwner`, same as Quick Match for consistency), and emits `invite:redeemed` to the creator's socket room.
+**How:** `Invite` (`creator`, `writingType`, `theme`, `code` — a random token reusing the same `generateRawToken` helper as email verification, `status`, `collaboration`). Redeeming validates the code is still `pending`, rejects self-redemption, creates the `Collaboration` (random `turnOwner`, same as Quick Match for consistency; `theme` is the creator's choice, carried through untouched — the redeemer has no say, exactly like `writingType`), and emits `invite:redeemed` to the creator's socket room.
 
 **Endpoints:** `POST /invites` (create), `POST /invites/:code/redeem`, `DELETE /invites/:id` (cancel), `GET /invites` (list mine).
 
@@ -108,7 +112,9 @@ Domains: **authentication, collaboration, matchmaking, invite, ai, chat, leaderb
 
 **Why Gemini over Claude:** Gemini has a genuine ongoing free tier suited to this low-complexity task; Claude's API doesn't have a comparable standing free tier for production use.
 
-**How:** `generateKeywords(writingType)` tries Gemini first (model **`gemini-flash-latest`** — see bug log below for why not `gemini-2.0-flash`), parses the response into 5 lowercase words; **any** failure (quota, network, bad response, missing key) falls through to a hand-authored fallback pool — two curated lists of 120 unique words each (`story`, `poem`), so a fallback keyword set still feels tailored to the writing type. Callers never know which source they got.
+**How:** `generateKeywords(writingType, theme = 'classic')` tries Gemini first (model **`gemini-flash-latest`** — see bug log below for why not `gemini-2.0-flash`), parses the response into 5 lowercase words; **any** failure (quota, network, bad response, missing key) falls through to a hand-authored fallback pool — two curated lists of 120 unique words each (`story`, `poem`), so a fallback keyword set still feels tailored to the writing type. Callers never know which source they got.
+
+**Theme (genre/prompt variety):** a `theme` field (`classic`, `mystery`, `horror`, `romance`, `sci-fi`, `fantasy`, defined in `collaboration/collaboration.constants.js`'s `THEMES`) is chosen alongside `writingType` at Quick-Match-join/invite-creation time and stored on `Collaboration`/`MatchQueueEntry`/`Invite`. It's deliberately a *separate* field from `writingType`, not a new `writingType` enum value — `writingType` keeps governing turn structure (paragraph vs. line) untouched, and "genre" already means `story`/`poem` elsewhere in this app (the leaderboard's `both_genres`/`story_specialist`/`poem_specialist` badges, §8), so a second unrelated meaning of "genre" would collide with that. `theme` only flavors the Gemini prompt (`"a ${theme} ${writingType}"` when not `'classic'`) — **the fallback pool doesn't vary by theme**, a deliberate v1 trade-off: curating a themed pool for every theme × `writingType` combination is real content-authoring work disproportionate to this being explicitly the cheap phase of genre variety (structural formats like screenplay layout, which would need new turn-validation rules and a new PDF export branch, stay deferred entirely).
 
 **Diversity fix:** left at defaults, Gemini kept converging on the same handful of "safe" words (`ember`, `threshold`, `resonance`...) across unrelated calls. Fixed by setting `temperature`/`topP`/`topK` explicitly, randomizing a prompt "angle" per request (a themed hint like "a coastal town at dusk"), and naming the worst repeat offenders directly in the prompt as words to avoid.
 
@@ -200,11 +206,33 @@ Badge ids are stable storage keys and never renamed once shipped (a user's earne
 
 **`getReportedCollaboration(collaborationId)`:** the fix for a bug found while building this — the original admin panel's "View collaboration" link pointed at the regular `GET /collaborations/:id`, which is participant-gated (`findAccessible`, §3); an admin reviewing a report about two other users got a 403 there. This new admin-only endpoint fetches the collaboration **and** its chat history with no participant check at all — chat is included deliberately, since that's where harassment/spam actually tends to happen, not the co-written story text. The frontend renders this read-only, inline under the report row, rather than reusing the participant-facing collaboration page (which is full of actions — Report/Block/Leave/turn composer/chat send — that make no sense for a reviewing admin).
 
-**Endpoints:** `GET /admin/users`, `PATCH /admin/users/:id/ban`, `PATCH /admin/users/:id/unban`, `DELETE /admin/users/:id`, `GET /admin/collaborations/:id`. All gated `requireAuth, requireAdmin` (§2).
+**Endpoints:** `GET /admin/users`, `PATCH /admin/users/:id/ban`, `PATCH /admin/users/:id/unban`, `DELETE /admin/users/:id`, `GET /admin/collaborations/:id`, `PATCH /admin/collaborations/:id/unpublish` (§11). All gated `requireAuth, requireAdmin` (§2).
 
 ---
 
-## 11. Sockets
+## 11. Gallery domain (discovery)
+
+**What:** lets writers optionally publish a completed collaboration to a public, browsable gallery — anyone, logged in or not, can read a published piece. Final phase of a three-part public-launch roadmap (turn notifications → theme variety → this).
+
+**Consent model (settled design, not incidental):** publishing itself never requires the other participant's agreement — either can publish or unpublish a completed piece unilaterally (`setGalleryPublished` in `collaboration.service.js`), since requiring mutual sign-off would recreate the exact "one person's silence blocks the other's wish" problem this was built to avoid. Being **named** is a separate, personal choice (`setPublishConsent`, also in `collaboration.service.js`) — each participant has their own `hasConsentedToPublish` flag on their own participant subdocument, defaulting to `false` (**"Anonymous collaborator"**), independent of whether the piece is published, of who published it, and of the other participant's own choice. There's no special-casing "the person who clicked publish auto-consents," no pending/waiting state, and no timeout logic — silence, an explicit no, and never touching the toggle all collapse to the same outcome. That last point matters concretely here (as it did for turn notifications) because this stack has no cron/queue infrastructure to resolve a pending state against.
+
+**Model additions (`Collaboration`):** `isPublished` (Boolean, default `false`), `publishedAt` (Date, set the first time it flips true, left alone on unpublish — `isPublished` is the actual visibility source of truth), and per-participant `hasConsentedToPublish` (Boolean, default `false`). No `title` field was added — a gallery card is identified by writingType/theme/date plus an auto-derived excerpt instead, avoiding new input UI entirely.
+
+**Why a separate `gallery` domain instead of new branches in `collaboration`:** this is the first genuinely public read surface in the entire API — `gallery.routes.js` has no `requireAuth` at all, unlike every other domain. Keeping it separate means `collaboration.service.js`'s participant-gated `findAccessible` never has to grow a "well, unless it's published" exception; the two read paths (participant-gated vs. public) stay structurally distinct.
+
+**The one security-critical detail in this whole feature:** the byline (real `displayName` vs. `'Anonymous collaborator'`) is computed **server-side**, in `gallery.service.js`'s `buildDisplayNameMap`, before any response is built — applied uniformly to both the piece-level author list and each individual turn's `entry.author`, since a consent toggle would be pointless if a reader could still see the real name on every turn. Never send a raw `displayName` for a non-consenting participant and rely on the frontend to hide it — the exact class of bug already avoided once in this codebase (never leaking email via `collaboration.service.js`'s `PARTICIPANT_POPULATE`, §3).
+
+**`listPublished({page, limit, writingType, theme})`:** `Collaboration.find({isPublished: true, ...filters})`, sorted `publishedAt` descending, same `{items, hasMore, total}` pagination shape the rest of the app uses. Each item includes a plain-text excerpt (HTML stripped, truncated to 150 characters from the joined entry content).
+
+**`getPublished(collaborationId)`:** 404s unless `isPublished === true` — this holds even for the piece's own authors; viewing an *unpublished* piece always goes through the normal participant-gated `GET /collaborations/:id`, never this route. Returns full entries (safe to show as-authored — consent only ever governs the author's *name*, never the writing) with the same consent-respecting byline per entry.
+
+**Moderation backstop:** gallery content is visible to any visitor, not just the two authors, which needs a safety valve the existing `Report` model doesn't fit — `reportUser` requires the reporter to *be* a collaboration participant (`findTargetParticipant`, §9), which doesn't cover "a random visitor reports a public piece they had no part in." Rather than reshape that model (real scope, not this phase's job), the admin domain (§10) gained `unpublishCollaboration(collaborationId)` — no participant check, same reasoning as `getReportedCollaboration` — as the v1 safety valve. No visitor-facing "report this piece" button exists yet; see `KNOWN_ISSUES.md` for this as an explicit, conscious gap rather than an oversight.
+
+**Endpoints:** `GET /gallery` (list, filterable by `writingType`/`theme`), `GET /gallery/:id` (detail) — no auth middleware at all. `PATCH /collaborations/:id/publish` and `PATCH /collaborations/:id/publish-consent` (both `requireAuth` + `blockInactiveParticipant`, §2/§3) are where a participant actually toggles publish state or their own consent.
+
+---
+
+## 12. Sockets
 
 Every domain that needs to push a real-time notification (matchmaking, invite, collaboration, chat) shares one Socket.IO server (`sockets/index.js`):
 - **Auth:** a connection-level middleware reads the `accessToken` cookie from the handshake headers (hand-parsed — no new dependency) and verifies it with the same JWT logic as HTTP's `requireAuth`.
@@ -214,7 +242,7 @@ Every domain that needs to push a real-time notification (matchmaking, invite, c
 
 ---
 
-## 12. Rate limiting
+## 13. Rate limiting
 
 `express-rate-limit`, applied in `app.js`:
 - A general baseline across all of `/api`: 300 requests / 15 min per IP.
@@ -224,19 +252,19 @@ Every domain that needs to push a real-time notification (matchmaking, invite, c
 
 ---
 
-## 13. Automated testing
+## 14. Automated testing
 
 `npm test` (in `server/`) runs `node --test "src/**/*.test.js"` — Node's built-in test runner, zero new dependencies. Tests are colocated with the service they cover (`*.service.test.js`), and hit the **real** MongoDB Atlas dev database directly (matching this project's established practice of testing against real infrastructure rather than mocks), with explicit cleanup in every test.
 
 - **Mailer mocking:** `utils/mailer.js` exports a single mutable object (`{ sendVerificationEmail, sendPasswordResetEmail, sendGoogleAccountNoticeEmail }`) rather than named exports, specifically so `node:test`'s `mock.method()` can swap individual methods in auth tests — ES module named-export bindings are frozen and can't be mocked this way, a plain object's properties can.
 - **Socket-dependent services:** `testUtils/testSocket.js` spins up a throwaway HTTP server + `initIO()` so services that call `getIO()` (matchmaking, invite, collaboration) don't throw in tests — nothing needs to actually connect, `io.to(room).emit(...)` is a safe no-op with zero listening sockets.
 - **Middleware tests:** `blockInactiveParticipant` (§2) is Express middleware, not a service function, and this project has no supertest-style HTTP test harness — rather than add one for a single middleware, `auth.middleware.test.js` calls it directly with a mock `req`/`res`/`next`, which exercises the exact same DB-check-and-branch logic without needing a running server.
-- **Coverage:** auth (register/login/verify/reset/change-password/delete/banned-account-rejected-at-login, streak increment/reset across day boundaries, badge thresholds including partner-diversity and turn-count badges), collaboration (turn ownership, one-line/one-paragraph enforcement, completion approve/reject, pagination + status filtering, turn-count, leave-freezes-turns-and-completion, completion records leaderboard points and activity stats), invites (create/redeem/cancel/self-redeem-block/blocked-redeemer-rejected), matchmaking (pairing logic, blocked-pair exclusion), leaderboard (weighted-points idempotency, ranking, week/month-boundary exclusion, deleted-account exclusion, deterministic tie-breaking), moderation (report/block authorization, duplicate-report idempotency, bidirectional block lookup, admin report listing/review), chat (send succeeds while in progress, send rejected once ended, history reads stay open regardless of status), admin domain (user listing with report counts, ban/unban, self-target and other-admin-target rejections, delete-anonymizes, reported-collaboration read with no participant check), auth middleware (`blockInactiveParticipant` allows an active user, rejects a banned user, rejects an admin), CAPTCHA (`turnstile.verifyToken` succeeds/fails/bypasses-when-unconfigured against a mocked `fetch`, and `register` itself rejects when verification fails). 91 tests total, all passing.
+- **Coverage:** auth (register/login/verify/reset/change-password/delete/banned-account-rejected-at-login, streak increment/reset across day boundaries, badge thresholds including partner-diversity and turn-count badges), collaboration (turn ownership, one-line/one-paragraph enforcement, completion approve/reject, pagination + status filtering, turn-count, leave-freezes-turns-and-completion, completion records leaderboard points and activity stats, turn-handoff sends a "your turn" email and respects its per-collaboration cooldown, publishing/unpublishing works unilaterally, publish consent only ever changes the caller's own subdocument), gallery (list only returns published pieces, consent-respecting bylines on both the piece and per-entry, writingType/theme filters, pagination, detail 404s for unpublished/nonexistent pieces including for the piece's own authors), invites (create/redeem/cancel/self-redeem-block/blocked-redeemer-rejected, theme stored and carried through redemption untouched by the redeemer), matchmaking (pairing logic, blocked-pair exclusion, differently-themed entries still match and resolve to one of the two themes, getStatus reports theme), AI keywords (`generateKeywords` returns 5 fallback words for both the default and a themed request), leaderboard (weighted-points idempotency, ranking, week/month-boundary exclusion, deleted-account exclusion, deterministic tie-breaking), moderation (report/block authorization, duplicate-report idempotency, bidirectional block lookup, admin report listing/review), chat (send succeeds while in progress, send rejected once ended, history reads stay open regardless of status), admin domain (user listing with report counts, ban/unban, self-target and other-admin-target rejections, delete-anonymizes, reported-collaboration read with no participant check, unpublish works with no participant check), auth middleware (`blockInactiveParticipant` allows an active user, rejects a banned user, rejects an admin), CAPTCHA (`turnstile.verifyToken` succeeds/fails/bypasses-when-unconfigured against a mocked `fetch`, and `register` itself rejects when verification fails). 111 tests total, all passing.
 - **What's deliberately not covered:** raw Socket.IO event delivery over the wire (verified manually/via live scripts during development instead — a full socket-server integration harness was judged not worth the added complexity for the confidence gained), `googleLogin`'s ban check (mirrors the tested `login()` check exactly, but there's no existing harness for mocking `google-auth-library`'s token verification, and building one just for this one-line symmetric check wasn't judged worth it — verified by code inspection instead), and there is currently no frontend test coverage at all (no Vitest/RTL/Playwright) — everything on the client has been verified by manual reasoning and live curl/socket scripts.
 
 ---
 
-## 14. CI/CD
+## 15. CI/CD
 
 `.github/workflows/server-tests.yml` runs the backend test suite (§13) on every push and pull request, on any branch: checkout → `actions/setup-node@v4` (Node 22) → `npm ci` (server/) → `npm test`.
 
@@ -246,7 +274,7 @@ Every domain that needs to push a real-time notification (matchmaking, invite, c
 
 ---
 
-## 15. Bugs found and fixed
+## 16. Bugs found and fixed
 
 | # | Bug | Root cause | Fix |
 |---|---|---|---|
@@ -271,13 +299,14 @@ Every domain that needs to push a real-time notification (matchmaking, invite, c
 | 19 | Filed reports had no way to be reviewed as a body of data — only a one-off email | Deliberate MVP scope cut when report/block shipped, closed as the next follow-up per explicit request | Added `role` to `User` (`user`/`admin`, set manually in the DB only — no self-service promotion endpoint), a `requireAdmin` middleware that re-checks the DB fresh on every request (no JWT payload change, so a role edit takes effect without re-login), and a gated `/admin` page listing reports with a "Mark reviewed" action and a direct link into the referenced collaboration |
 | 20 | An admin account could still join Quick Match, redeem/create invites, submit turns, and chat like any normal writer; there was also no way to act on a report beyond marking it reviewed; and the report panel's "View collaboration" link 403'd for an admin who wasn't a participant | The first admin panel pass (#19) only gated the two `/moderation/reports` routes — nothing else anywhere checked `role`, and `GET /collaborations/:id` was (correctly, for a normal user) participant-gated, which an admin reviewing someone else's report will never be | Added `blockInactiveParticipant` middleware (§2) to the actual participant-acting endpoints across matchmaking/invite/collaboration/chat; added a new `admin` domain (§10) with user listing (+ open-report counts), ban/unban, delete (reuses the existing `deleteAccount` anonymization), and a participant-check-free `GET /admin/collaborations/:id` that also returns chat history; gave the admin UI its own shell/nav entirely separate from the writer UI (see `docs/FRONTEND.md`) |
 | 21 | Clicking "Mark reviewed" made a report's reporter/reported-user both collapse to "Deleted user" in the admin UI, until the page was refreshed | `markReportReviewed` returned the raw updated `Report` document with `reporter`/`reportedUser` as bare ObjectIds — unlike `listReports`, it never populated them — and the frontend swaps that response straight into local state, so the row rendered with no `displayName`/`email` to read until the next full `listReports()` refetch repopulated it | Added the same `.populate('reporter', ...)`/`.populate('reportedUser', ...)` chain `listReports` already uses to `markReportReviewed`; strengthened its test to assert the names survive the update, not just the status |
+| 22 | `collaboration.service.test.js`'s turn-notification tests flaked intermittently across full-suite runs — sometimes 1 call expected but 0 or 2 observed | The "your turn" email is sent fire-and-forget from `submitTurn` (§3); one test (`submitTurn accepts valid content...`) triggered a notification but never waited for it before finishing, so its dangling promise could resolve *during* a later test and call that later test's freshly-installed mock instead — an extra, unexpected call landing in a different test's count. A fixed `setTimeout` "flush" delay in the two tests that did wait was also just masking the same class of issue (works until real DB latency exceeds the delay) | Every test that triggers a notification now drains it via a poll-until-expected-call-count helper (not a fixed sleep) before finishing, so no fire-and-forget work can cross a test boundary; found via repeated full-suite runs surfacing two different failure shapes (`0 !== 1`, then `2 !== 1`) that pointed at cross-test leakage rather than a single race |
 
-## 16. Operational incidents (not code bugs, but shaped a lot of this build)
+## 17. Operational incidents (not code bugs, but shaped a lot of this build)
 
 - **MongoDB Atlas connectivity outage:** login and turn-submission both 500'd with a raw TLS/`ReplicaSetNoPrimary` error from Mongoose. Root cause was Atlas's Network Access list no longer matching the current public IP (common with dynamic ISP addresses) — fixed by widening it to `0.0.0.0/0`. Not a code issue; confirmed by testing the exact same request before/after the allow-list change.
 - **Orphaned dev-server processes:** every manual restart this session killed only the process holding port 5000, never the `npm run dev` → `nodemon` parent chain that spawned it. Over many restarts this left **16 orphaned nodemon instances** silently running, all watching the same files and racing each other to rebind the port after any edit — whichever won a given restart could be serving stale code from hours earlier. Fixed by identifying and killing every `nodemon.js .../server.js` and `npm-cli.js run dev` process by exact command line before any subsequent restart.
 
-## 17. Known limitations (deliberately deferred, not overlooked)
+## 18. Known limitations (deliberately deferred, not overlooked)
 
 - **Three open dependency CVEs** (down from four — removing `nodemailer` in favor of an HTTP API-based email provider cleared its high-severity CVE as a side effect, not a dedicated fix), each requiring a breaking upgrade: `react-router`/`react-router-dom` (moderate, no fix exists in the 6.x line — needs a v6→v7 migration), Vite/esbuild (moderate-high, dev-server only, needs v5→v8), and a transitive `uuid`/`gaxios` issue pulled in via `google-auth-library` (fixing it means bumping that library, risking the Google Sign-In flow). All three were investigated and consciously deferred as separate migration tasks rather than bundled into unrelated work.
 - **Gemini's 20/day free-tier ceiling** (§6) — a product/cost decision, not a bug.

@@ -25,3 +25,8 @@ export const getReportedCollaborationHandler = asyncHandler(async (req, res) => 
   const result = await adminService.getReportedCollaboration(req.params.id);
   res.json({ success: true, data: result });
 });
+
+export const unpublishCollaborationHandler = asyncHandler(async (req, res) => {
+  await adminService.unpublishCollaboration(req.params.id);
+  res.json({ success: true, message: 'Collaboration unpublished' });
+});

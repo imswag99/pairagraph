@@ -1,16 +1,19 @@
 import { asyncHandler } from '../../utils/asyncHandler.js';
 import { ApiError } from '../../utils/ApiError.js';
+import { WRITING_TYPES, THEMES } from '../collaboration/collaboration.constants.js';
 import * as matchmakingService from './matchmaking.service.js';
-
-const WRITING_TYPES = ['story', 'poem'];
 
 export const joinQueueHandler = asyncHandler(async (req, res) => {
   const { writingType } = req.body;
+  const theme = req.body.theme ?? 'classic';
   if (!WRITING_TYPES.includes(writingType)) {
     throw new ApiError(400, "writingType must be 'story' or 'poem'");
   }
+  if (!THEMES.includes(theme)) {
+    throw new ApiError(400, `theme must be one of: ${THEMES.join(', ')}`);
+  }
 
-  const result = await matchmakingService.joinQueue(req.user.id, writingType);
+  const result = await matchmakingService.joinQueue(req.user.id, writingType, theme);
   res.json({ success: true, data: result });
 });
 

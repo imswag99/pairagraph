@@ -6,10 +6,11 @@ import { ApiError } from '../../utils/ApiError.js';
 import { generateRawToken } from '../../utils/tokens.js';
 import { getIO } from '../../sockets/index.js';
 
-export async function createInvite(userId, writingType) {
+export async function createInvite(userId, writingType, theme = 'classic') {
   const invite = await Invite.create({
     creator: userId,
     writingType,
+    theme,
     code: generateRawToken(),
   });
   return invite;
@@ -35,8 +36,9 @@ export async function redeemInvite(userId, code) {
   const collaboration = await Collaboration.create({
     participants: participantIds.map((id) => ({ user: id })),
     writingType: invite.writingType,
+    theme: invite.theme,
     turnOwner,
-    keywords: await generateKeywords(invite.writingType),
+    keywords: await generateKeywords(invite.writingType, invite.theme),
   });
 
   invite.status = 'redeemed';
@@ -66,6 +68,7 @@ export async function getMine(userId) {
   return invites.map((i) => ({
     id: i._id,
     writingType: i.writingType,
+    theme: i.theme,
     code: i.code,
     status: i.status,
     createdAt: i.createdAt,

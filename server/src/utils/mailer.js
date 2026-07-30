@@ -74,6 +74,18 @@ async function sendReportNotificationEmail({ reporter, reportedUser, collaborati
   });
 }
 
+async function sendYourTurnEmail(email, { collaborationId, writingType }) {
+  const url = `${process.env.CLIENT_URL}/collaborations/${collaborationId}`;
+
+  await brevo.transactionalEmails.sendTransacEmail({
+    sender,
+    to: [{ email }],
+    subject: "It's your turn on Pairagraph",
+    htmlContent: `<p>Your writing partner just took their turn on your ${writingType} — it's your turn now.</p>
+           <p><a href="${url}">${url}</a></p>`,
+  });
+}
+
 // Exported as a single mutable object (rather than named exports) so tests can
 // swap individual methods with node:test's mock.method without hitting the real API.
 export const mailer = {
@@ -81,4 +93,5 @@ export const mailer = {
   sendPasswordResetEmail,
   sendGoogleAccountNoticeEmail,
   sendReportNotificationEmail,
+  sendYourTurnEmail,
 };

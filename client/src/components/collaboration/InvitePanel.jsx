@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { inviteService } from '../../services/inviteService.js';
 import { WritingTypePicker } from './WritingTypePicker.jsx';
+import { ThemePicker } from './ThemePicker.jsx';
 
 function extractCode(input) {
   const trimmed = input.trim();
@@ -56,6 +57,7 @@ function JoinTab() {
 export function InvitePanel() {
   const [tab, setTab] = useState('create');
   const [writingType, setWritingType] = useState('story');
+  const [theme, setTheme] = useState('classic');
   const [activeInvite, setActiveInvite] = useState(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -72,7 +74,7 @@ export function InvitePanel() {
     setError('');
     setIsSubmitting(true);
     try {
-      const { data } = await inviteService.create(writingType);
+      const { data } = await inviteService.create(writingType, theme);
       setActiveInvite(data.invite);
     } catch (err) {
       setError(err.message);
@@ -165,6 +167,7 @@ export function InvitePanel() {
       ) : (
         <>
           <WritingTypePicker value={writingType} onChange={setWritingType} />
+          <ThemePicker value={theme} onChange={setTheme} />
           {error && <p className="text-sm text-red-600">{error}</p>}
           <button
             type="button"

@@ -16,6 +16,8 @@ const VerifyEmailPage = namedLazy(() => import('../pages/VerifyEmailPage.jsx'), 
 const CollaborationPage = namedLazy(() => import('../pages/CollaborationPage.jsx'), 'CollaborationPage');
 const CollaborationsPage = namedLazy(() => import('../pages/CollaborationsPage.jsx'), 'CollaborationsPage');
 const LeaderboardPage = namedLazy(() => import('../pages/LeaderboardPage.jsx'), 'LeaderboardPage');
+const GalleryPage = namedLazy(() => import('../pages/GalleryPage.jsx'), 'GalleryPage');
+const GalleryItemPage = namedLazy(() => import('../pages/GalleryItemPage.jsx'), 'GalleryItemPage');
 const InvitePage = namedLazy(() => import('../pages/InvitePage.jsx'), 'InvitePage');
 const ResetPasswordPage = namedLazy(() => import('../pages/ResetPasswordPage.jsx'), 'ResetPasswordPage');
 const AccountPage = namedLazy(() => import('../pages/AccountPage.jsx'), 'AccountPage');
@@ -64,6 +66,8 @@ export function AppRoutes() {
         <Route path="/collaborations" element={<CollaborationsPage />} />
         <Route path="/collaborations/:id" element={<CollaborationPage />} />
         <Route path="/leaderboard" element={<LeaderboardPage />} />
+        <Route path="/discover" element={<GalleryPage />} />
+        <Route path="/discover/:id" element={<GalleryItemPage />} />
         <Route path="/invite/:code" element={<InvitePage />} />
         <Route path="/reset-password/:token" element={<ResetPasswordPage />} />
         <Route path="/account" element={<AccountPage />} />

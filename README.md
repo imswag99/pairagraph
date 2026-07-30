@@ -9,12 +9,13 @@ Pairagraph is a turn-based collaborative writing app: two people are paired up (
 - **Email/password and Google sign-in**, with email verification, password reset, account management (change display name/password, delete account), and a Cloudflare Turnstile CAPTCHA on registration to keep it from being spammed.
 - **Turn-based writing** — one paragraph per turn for stories, one line per turn for poems, enforced both in the editor and on the server.
 - **Quick Match** (paired with a random waiting partner) and **invite links** as the two ways to start a collaboration.
-- **AI-generated keywords** (Google Gemini, with a local fallback pool) for inspiration on every new collaboration.
-- **Live updates** over Socket.IO — turns, completion responses, matches, invites, and chat all push in real time.
+- **AI-generated keywords** (Google Gemini, with a local fallback pool) for inspiration on every new collaboration, optionally flavored by a theme (mystery, horror, romance, sci-fi, fantasy) picked alongside the story/poem choice.
+- **Live updates** over Socket.IO — turns, completion responses, matches, invites, and chat all push in real time. An email nudge (rate-limited per collaboration) also lands when it's your turn, for whenever you're not actively on the site.
 - **Mutual-approval completion** — a collaboration only finishes once both participants agree.
 - **PDF export** of completed pieces, read as continuous prose rather than turn-by-turn, with bold/italic formatting preserved.
 - **Leaderboard** — points for finishing a collaboration together, weighted by how much you wrote, with weekly, monthly, and all-time rankings, plus streaks and milestone badges to keep writers coming back.
-- **Report, block, and leave** — flag a writing partner for review, block them from ever being matched with you again, or leave an active collaboration outright (freezes it for both sides without deleting anything either of you wrote). A separate, gated admin panel lets the site owner review reports (with the reported collaboration's writing and chat shown inline), and ban or delete abusive accounts — an admin account can't itself Quick Match, invite, or write, on the server as well as in the UI.
+- **Discover** — either writer can publish a completed piece to a public gallery anyone can browse, logged in or not. Publishing never needs the other writer's agreement; being credited by name is a separate, personal choice for each of you that defaults to "Anonymous collaborator."
+- **Report, block, and leave** — flag a writing partner for review, block them from ever being matched with you again, or leave an active collaboration outright (freezes it for both sides without deleting anything either of you wrote). A separate, gated admin panel lets the site owner review reports (with the reported collaboration's writing and chat shown inline), ban or delete abusive accounts, and unpublish a gallery piece — an admin account can't itself Quick Match, invite, or write, on the server as well as in the UI.
 - Paginated collaboration/chat history, a "your turn" count badge in the nav, and skeleton loading states throughout.
 
 ## Tech stack
@@ -31,7 +32,8 @@ pairagraph/
 ├── client/     React + Vite frontend
 ├── server/     Express backend, organized by domain
 │   └── src/domains/   authentication, collaboration, matchmaking,
-│                       invite, ai, chat, leaderboard, moderation, admin
+│                       invite, ai, chat, leaderboard, moderation, admin,
+│                       gallery
 ├── docs/       BACKEND.md, FRONTEND.md
 └── .github/workflows/  CI (runs the backend test suite)
 ```
@@ -81,7 +83,7 @@ npm run dev       # http://localhost:5173
 
 ## Testing
 
-The backend has an automated test suite (`server/npm test`, 91 tests) covering auth, the turn-based writing rules, matchmaking, invites, the leaderboard, report/block moderation, and admin user management — it runs in CI on every push and pull request (see `.github/workflows/server-tests.yml`). The frontend does not yet have automated tests; see `docs/FRONTEND.md` for details and known gaps.
+The backend has an automated test suite (`server/npm test`, 111 tests) covering auth, the turn-based writing rules, matchmaking, invites, the leaderboard, report/block moderation, admin user management, and the public gallery — it runs in CI on every push and pull request (see `.github/workflows/server-tests.yml`). The frontend does not yet have automated tests; see `docs/FRONTEND.md` for details and known gaps.
 
 ## License
 

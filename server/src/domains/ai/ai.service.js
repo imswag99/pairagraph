@@ -40,14 +40,19 @@ function parseKeywords(text) {
   return words.length >= 5 ? words.slice(0, 5) : null;
 }
 
-export async function generateKeywords(writingType) {
+export async function generateKeywords(writingType, theme = 'classic') {
   if (genAI) {
     try {
       const model = genAI.getGenerativeModel({
         model: 'gemini-flash-latest',
         generationConfig: { temperature: 1.3, topP: 0.98, topK: 64 },
       });
-      const prompt = `Give exactly 5 single evocative English words, comma-separated, no numbering, to inspire two people collaboratively writing a ${writingType} together. Draw inspiration from this angle without naming it directly: ${pickRandomAngle()}. Avoid overused writing-prompt words like "ember", "threshold", "whisper", "echo", "labyrinth", or "resonance".`;
+      // theme only flavors the prompt text — it never changes the fallback
+      // pool below, which stays generic per writingType regardless of theme
+      // (curating a themed pool for every theme x writingType combination
+      // is real content work, disproportionate to this being the cheap phase).
+      const themedType = theme !== 'classic' ? `${theme} ${writingType}` : writingType;
+      const prompt = `Give exactly 5 single evocative English words, comma-separated, no numbering, to inspire two people collaboratively writing a ${themedType} together. Draw inspiration from this angle without naming it directly: ${pickRandomAngle()}. Avoid overused writing-prompt words like "ember", "threshold", "whisper", "echo", "labyrinth", or "resonance".`;
       const result = await model.generateContent(prompt);
       const parsed = parseKeywords(result.response.text());
       if (parsed) {

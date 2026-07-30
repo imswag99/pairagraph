@@ -74,6 +74,7 @@ export function CollaborationPage() {
   }
 
   const other = collaboration.participants.find((p) => p.user._id !== currentUser.id);
+  const self = collaboration.participants.find((p) => p.user._id === currentUser.id);
   const isYourTurn =
     collaboration.status === 'in_progress' && collaboration.turnOwner._id === currentUser.id;
 
@@ -84,6 +85,16 @@ export function CollaborationPage() {
 
   async function handleRespond(approve) {
     const { data } = await collaborationService.respondToCompletion(id, approve);
+    setCollaboration(data.collaboration);
+  }
+
+  async function handleTogglePublished(published) {
+    const { data } = await collaborationService.setPublished(id, published);
+    setCollaboration(data.collaboration);
+  }
+
+  async function handleToggleConsent(consent) {
+    const { data } = await collaborationService.setPublishConsent(id, consent);
     setCollaboration(data.collaboration);
   }
 
@@ -229,6 +240,35 @@ export function CollaborationPage() {
               <div className="h-px w-full bg-charcoal/10" />
               <EntryList entries={collaboration.entries} />
             </div>
+
+            {collaboration.status === 'completed' && (
+              <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg bg-charcoal/5 px-4 py-3 text-xs text-charcoal/60">
+                <span>
+                  {collaboration.isPublished
+                    ? 'Published to the public gallery.'
+                    : 'Not published — only you two can see this.'}{' '}
+                  Either of you can publish or unpublish it, and each of you decides separately
+                  whether your own name is shown.
+                </span>
+                <div className="flex shrink-0 items-center gap-3">
+                  <label className="flex items-center gap-1.5">
+                    <input
+                      type="checkbox"
+                      checked={self?.hasConsentedToPublish ?? false}
+                      onChange={(e) => handleToggleConsent(e.target.checked)}
+                    />
+                    Show my name
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => handleTogglePublished(!collaboration.isPublished)}
+                    className="rounded-full border border-indigo/40 px-3 py-1.5 font-medium text-indigo-dark transition hover:border-indigo hover:bg-indigo-tint"
+                  >
+                    {collaboration.isPublished ? 'Remove from gallery' : 'Publish to gallery'}
+                  </button>
+                </div>
+              </div>
+            )}
 
             {collaboration.status === 'in_progress' ? (
               isYourTurn ? (

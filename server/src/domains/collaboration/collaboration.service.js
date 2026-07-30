@@ -1,12 +1,34 @@
 import { Collaboration } from './collaboration.model.js';
+import { User } from '../authentication/auth.model.js';
 import { ApiError } from '../../utils/ApiError.js';
 import { getIO } from '../../sockets/index.js';
+import { mailer } from '../../utils/mailer.js';
+import { logger } from '../../utils/logger.js';
 import { awardCompletionPoints } from '../leaderboard/leaderboard.service.js';
 import { recordCompletionActivity } from '../authentication/auth.service.js';
 
 const PARTICIPANT_POPULATE = { path: 'participants.user', select: 'displayName' };
 const TURN_OWNER_POPULATE = { path: 'turnOwner', select: 'displayName' };
 const ENTRY_AUTHOR_POPULATE = { path: 'entries.author', select: 'displayName' };
+
+// Bounds how often a "your turn" email can fire for a given (user,
+// collaboration) pair — email is sent synchronously at turn-handoff (no
+// cron/queue infra exists in this stack), so without a cooldown a fast
+// back-and-forth session could burn through Brevo's 300/day free cap fast.
+const TURN_NOTIFICATION_COOLDOWN_MS = 4 * 60 * 60 * 1000;
+
+// Never populated with email (PARTICIPANT_POPULATE only selects displayName,
+// since that populate feeds the API response both participants receive —
+// adding email there would leak it to the other writer), so it's fetched
+// separately here instead.
+async function notifyTurnHandoff(collaboration, userId) {
+  const user = await User.findById(userId).select('email');
+  if (!user?.email) return;
+  await mailer.sendYourTurnEmail(user.email, {
+    collaborationId: collaboration._id,
+    writingType: collaboration.writingType,
+  });
+}
 
 function isParticipant(collaboration, userId) {
   return collaboration.participants.some((p) => p.user.toString() === userId.toString());
@@ -124,7 +146,21 @@ export async function submitTurn(userId, collaborationId, content) {
     p.hasApproved = null;
   });
 
+  const notifiedAt = otherParticipant.lastTurnNotifiedAt;
+  const shouldNotify =
+    !notifiedAt || Date.now() - notifiedAt.getTime() >= TURN_NOTIFICATION_COOLDOWN_MS;
+  if (shouldNotify) {
+    otherParticipant.lastTurnNotifiedAt = new Date();
+  }
+
   await collaboration.save();
+
+  if (shouldNotify) {
+    notifyTurnHandoff(collaboration, otherParticipant.user).catch((err) => {
+      logger.error('Failed to send turn notification email', { error: err.body ?? err.message });
+    });
+  }
+
   await collaboration.populate([PARTICIPANT_POPULATE, TURN_OWNER_POPULATE, ENTRY_AUTHOR_POPULATE]);
   broadcastUpdate(collaboration);
   return collaboration;
@@ -168,6 +204,43 @@ export async function respondToCompletion(userId, collaborationId, approve) {
 
   await collaboration.populate([PARTICIPANT_POPULATE, TURN_OWNER_POPULATE, ENTRY_AUTHOR_POPULATE]);
   broadcastUpdate(collaboration);
+  return collaboration;
+}
+
+// Either participant may publish or unpublish a completed piece unilaterally
+// — requiring both to agree would recreate the exact "one person's silence
+// blocks the other's wish" problem this feature deliberately avoids. Being
+// named is a separate, personal choice (see setPublishConsent) and never
+// auto-granted just because someone is the one who clicked publish.
+export async function setGalleryPublished(userId, collaborationId, published) {
+  const collaboration = await findAccessible(userId, collaborationId);
+
+  if (collaboration.status !== 'completed') {
+    throw new ApiError(409, 'Only a completed collaboration can be published');
+  }
+
+  collaboration.isPublished = published;
+  if (published && !collaboration.publishedAt) {
+    collaboration.publishedAt = new Date();
+  }
+  await collaboration.save();
+
+  await collaboration.populate([PARTICIPANT_POPULATE, TURN_OWNER_POPULATE, ENTRY_AUTHOR_POPULATE]);
+  return collaboration;
+}
+
+// A participant may only ever set their OWN consent — structurally
+// impossible to consent on someone else's behalf. Independent of whether
+// the piece is published, of who published it, and of the other
+// participant's own choice.
+export async function setPublishConsent(userId, collaborationId, consent) {
+  const collaboration = await findAccessible(userId, collaborationId);
+
+  const self = collaboration.participants.find((p) => p.user.toString() === userId.toString());
+  self.hasConsentedToPublish = consent;
+  await collaboration.save();
+
+  await collaboration.populate([PARTICIPANT_POPULATE, TURN_OWNER_POPULATE, ENTRY_AUTHOR_POPULATE]);
   return collaboration;
 }
 

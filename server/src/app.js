@@ -11,6 +11,7 @@ import chatRoutes from './domains/chat/chat.routes.js';
 import leaderboardRoutes from './domains/leaderboard/leaderboard.routes.js';
 import moderationRoutes from './domains/moderation/moderation.routes.js';
 import adminRoutes from './domains/admin/admin.routes.js';
+import galleryRoutes from './domains/gallery/gallery.routes.js';
 import { errorHandler } from './middleware/errorHandler.js';
 
 function rateLimitHandler(req, res) {
@@ -67,6 +68,7 @@ export function createApp() {
   app.use('/api/leaderboard', leaderboardRoutes);
   app.use('/api/moderation', moderationRoutes);
   app.use('/api/admin', adminRoutes);
+  app.use('/api/gallery', galleryRoutes);
 
   // Only reports genuinely unexpected errors, same isOperational split
   // errorHandler already makes — an ApiError (bad password, not found, a

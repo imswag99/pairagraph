@@ -102,6 +102,25 @@ test('getStatus reports the writing type while waiting', async () => {
   await matchmakingService.cancel(userA._id);
 });
 
+test('getStatus reports the theme while waiting, defaulting to classic', async () => {
+  await matchmakingService.joinQueue(userA._id, 'poem', 'horror');
+
+  const status = await matchmakingService.getStatus(userA._id);
+  assert.equal(status.theme, 'horror');
+
+  await matchmakingService.cancel(userA._id);
+});
+
+test('two same-type requests with different themes still match, landing on one of the two themes', async () => {
+  await matchmakingService.joinQueue(userA._id, 'story', 'mystery');
+  const result = await matchmakingService.joinQueue(userB._id, 'story', 'romance');
+
+  assert.equal(result.matched, true);
+
+  const collab = await Collaboration.findById(result.collaborationId);
+  assert.ok(['mystery', 'romance'].includes(collab.theme));
+});
+
 test('a blocked pair is skipped, but an unrelated third user still matches', async () => {
   await User.findByIdAndUpdate(userA._id, { $addToSet: { blockedUsers: userB._id } });
 

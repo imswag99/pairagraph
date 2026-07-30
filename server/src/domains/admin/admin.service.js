@@ -83,3 +83,17 @@ export async function getReportedCollaboration(collaborationId) {
 
   return { collaboration, messages };
 }
+
+// Moderation backstop for the public gallery: since anyone can view
+// published work (not just the two authors), an admin needs a way to pull a
+// piece down regardless of who published it or whether either author is
+// reachable. No participant check, same reasoning as getReportedCollaboration
+// above — this is precisely the case that check doesn't apply to.
+export async function unpublishCollaboration(collaborationId) {
+  const collaboration = await Collaboration.findByIdAndUpdate(collaborationId, {
+    isPublished: false,
+  });
+  if (!collaboration) {
+    throw new ApiError(404, 'Collaboration not found');
+  }
+}

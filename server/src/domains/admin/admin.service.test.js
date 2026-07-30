@@ -150,3 +150,22 @@ test('getReportedCollaboration rejects a bogus id', async () => {
     (err) => err.statusCode === 404
   );
 });
+
+test('unpublishCollaboration sets isPublished to false with no participant check', async () => {
+  await Collaboration.findByIdAndUpdate(collaboration._id, { isPublished: true });
+
+  // No caller/participant argument here either — same reasoning as
+  // getReportedCollaboration, this is the admin's moderation backstop for
+  // content anyone can see, not just the two authors.
+  await adminService.unpublishCollaboration(collaboration._id);
+
+  const updated = await Collaboration.findById(collaboration._id);
+  assert.equal(updated.isPublished, false);
+});
+
+test('unpublishCollaboration rejects a bogus id', async () => {
+  await assert.rejects(
+    () => adminService.unpublishCollaboration(new mongoose.Types.ObjectId()),
+    (err) => err.statusCode === 404
+  );
+});

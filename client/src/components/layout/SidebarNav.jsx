@@ -30,6 +30,9 @@ export function SidebarNav() {
       <NavLink to="/leaderboard" className={navLinkClass}>
         <span>Leaderboard</span>
       </NavLink>
+      <NavLink to="/discover" className={navLinkClass}>
+        <span>Discover</span>
+      </NavLink>
     </nav>
   );
 }

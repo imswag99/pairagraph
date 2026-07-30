@@ -86,6 +86,13 @@ function Hero({ onOpenModal }) {
           </button>
         </div>
 
+        <Link
+          to="/discover"
+          className="text-sm text-charcoal/50 underline decoration-charcoal/20 underline-offset-4 transition hover:text-charcoal"
+        >
+          Browse the gallery
+        </Link>
+
         <div className="mt-2 flex items-center gap-3 text-xs text-charcoal/40">
           <Link to="/privacy" className="underline decoration-charcoal/20 underline-offset-4 hover:text-charcoal/60">
             Privacy

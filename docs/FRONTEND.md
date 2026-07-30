@@ -49,6 +49,8 @@ client/src/
 | `/collaborations` | `CollaborationsPage` | "Continue writing" (active, unpaginated) + "Past collaborations" (paginated, "Load more"). See §7. |
 | `/collaborations/:id` | `CollaborationPage` | The actual writing loop — see §6. |
 | `/leaderboard` | `LeaderboardPage` | Week/all-time ranked table. See §9. |
+| `/discover` | `GalleryPage` | Public gallery of published collaborations — works for both logged-in and logged-out visitors. See §15. |
+| `/discover/:id` | `GalleryItemPage` | A single published piece, read-only. See §15. |
 | `/invite/:code` | `InvitePage` | Redeems the invite if logged in; otherwise shows a landing prompt with login/register modals. |
 | `/reset-password/:token` | `ResetPasswordPage` | New-password form, reached only via the emailed link. |
 | `/account` | `AccountPage` | Change display name, change password, blocked users, delete account. See §10. |
@@ -78,7 +80,7 @@ client/src/
 
 `AppShell` (header + `SidebarNav` + `<main>`) is the shared chrome for every authenticated page except `CollaborationPage` (which has its own distinct header — back link + partner name — since it's a focused writing view, not part of the dashboard family).
 
-`SidebarNav` is a horizontal tab row on narrow screens, a vertical sidebar at `lg:` and up (matches the responsive pattern used elsewhere). It fetches `GET /collaborations/turn-count` on mount and shows a small pill badge on the "Collaborations" link when it's greater than zero — a lightweight, purpose-built count endpoint rather than fetching full collaboration data just to derive a number.
+`SidebarNav` is a horizontal tab row on narrow screens, a vertical sidebar at `lg:` and up (matches the responsive pattern used elsewhere). It fetches `GET /collaborations/turn-count` on mount and shows a small pill badge on the "Collaborations" link when it's greater than zero — a lightweight, purpose-built count endpoint rather than fetching full collaboration data just to derive a number. A third link, "Discover" (§15), points at the one page in this nav that also works for logged-out visitors — it just renders differently (no `AppShell`) when there's no session.
 
 **An admin account never renders `AppShell`/`SidebarNav` at all.** An earlier pass added a conditional "Admin" link to `SidebarNav` — since removed, because it left an admin account able to reach every writer page (Quick Match, invites, the writing loop itself) through the exact same nav as everyone else. `HomePage` now redirects an admin straight to `/admin` instead of rendering the writer `Dashboard`, and both admin pages use a separate `AdminShell` with its own two-item nav (Reports, Users) — see §5.
 
@@ -132,8 +134,9 @@ Both use the shared `CollaborationCard` (also used standalone nowhere else now �
 
 ## 9. Matchmaking, invites, and the leaderboard
 
-- **`QuickMatchPanel`**: join/cancel the matchmaking queue, polls its own status once on mount to resume a "waiting…" state after a refresh.
-- **`InvitePanel`**: a segmented Create/Join control (`aria-pressed` reflects the active tab). Join accepts either a bare invite code or a full pasted URL (extracts the last path segment).
+- **`QuickMatchPanel`**: join/cancel the matchmaking queue, polls its own status once on mount to resume a "waiting…" state after a refresh (including the chosen `theme`, alongside `writingType`).
+- **`InvitePanel`**: a segmented Create/Join control (`aria-pressed` reflects the active tab). Join accepts either a bare invite code or a full pasted URL (extracts the last path segment); the Create tab is the only place `writingType`/`theme` are chosen — the redeemer has no say in either.
+- **`ThemePicker`** (`client/src/components/collaboration/ThemePicker.jsx`): same toggle-button-group pattern as `WritingTypePicker`, fed from `client/src/constants/themes.js`'s `THEME_OPTIONS`, wrapped (`flex-wrap`) since its 6 options don't fit one line the way `writingType`'s 2 did. Rendered alongside `WritingTypePicker` in both `QuickMatchPanel` and `InvitePanel`'s Create tab.
 - **`LeaderboardPage`**: a This week/This month/All time toggle (`aria-pressed`), a ranked table highlighting the current user's row, and a skeleton (3 placeholder rows) while loading. No pagination — capped at the top 50 server-side, which is plenty for a table this shape. A `StatsPanel` above the table reads streak/completion/badge fields straight off `currentUser` (already returned by every auth endpoint via the backend's `toSafeUser`, see `BACKEND.md` §8) — no extra request needed to show a user their own stats. The panel renders the **full badge catalog** (`client/src/constants/badges.js`, shared with the Homepage teaser below), not just earned ones — locked badges show dashed/muted with their unlock condition, so the game element is discoverable before a user has earned anything, not just a trophy case after the fact.
 - **Badge progress teaser (`HomePage.jsx`'s `BadgeProgressTeaser`)**: a single-line pill on the writer's dashboard, right under the hero, showing `n/13 badges` and a "Next up: <name> — <how to earn it>" nudge, linking to `/leaderboard`. Deliberately kept to one line rather than the full gallery — the dashboard's job is still "get the user writing," so this is a hint of the game layer, not the game layer itself.
 
@@ -189,7 +192,21 @@ Semantic landmarks (`<header>`, `<main>`, `<nav>`) were already in place. An exp
 
 ---
 
-## 15. Bugs found and fixed (frontend)
+## 15. Gallery / discovery (`GalleryPage`, `GalleryItemPage`)
+
+**What:** the public browsing surface for collaborations writers have opted to publish — the final phase of the notifications → theme variety → discovery roadmap.
+
+**Dual-mode chrome, same pattern `HomePage` already uses:** both pages render inside the normal `AppShell` (with the `SidebarNav`'s new "Discover" link) when `currentUser` exists, or a minimal standalone header (logo + link home — the same chrome `PrivacyPolicyPage` already uses) when it doesn't. This is the first pair of pages in the app that render real collaboration content for a logged-out visitor at all — every other content-bearing page (`CollaborationPage`, `CollaborationsPage`, `LeaderboardPage`, `AccountPage`) redirects unauthenticated visitors outright.
+
+**`GalleryPage`:** a paginated grid of cards (excerpt, writingType/theme tag, byline, publish date) with the same "Load more" pagination `CollaborationsPage`'s past-list already implements, plus writingType/theme filter chips styled like `WritingTypePicker`/`ThemePicker` but supporting an "All" option those don't.
+
+**`GalleryItemPage`:** renders a published piece by reusing the existing `EntryList` component as-is — porting the PDF export's continuous-prose algorithm (`utils/exportCollaborationPdf.js`, §11) was considered and rejected, since that algorithm is DOM/jsPDF-specific and not reusable for an on-screen render, whereas `EntryList`'s existing turn-by-turn on-screen rendering already works unmodified here. No chat, composer, or completion controls — this is a read-only view, not a participant view.
+
+**Publish/consent controls (`CollaborationPage`):** once a collaboration is `completed`, a new panel (next to the existing "Download PDF" button) shows a "Publish to gallery"/"Remove from gallery" toggle and a separate, personal "Show my name" checkbox. The two are deliberately independent — publishing never requires the other participant's agreement, and each participant's own name-consent choice never depends on who published it or what the other participant chose. Both call new `collaborationService` methods (`setPublished`, `setPublishConsent`) that PATCH the same collaboration record and swap the local state, same pattern `handleSubmitTurn`/`handleRespond` already use.
+
+---
+
+## 16. Bugs found and fixed (frontend)
 
 | # | Bug | Root cause | Fix |
 |---|---|---|---|
@@ -212,7 +229,7 @@ Semantic landmarks (`<header>`, `<main>`, `<nav>`) were already in place. An exp
 
 ---
 
-## 16. Known limitations
+## 17. Known limitations
 
 - **No automated frontend test coverage** — no Vitest/React Testing Library, no Playwright. Every behavior described in this document has been verified by manual reasoning, live curl/socket scripts during development, or production-build checks — not by a repeatable test suite. This is the single biggest gap on the frontend side.
 - **No real accessibility audit** beyond the icon-only-control pass in §14 — contrast ratios, keyboard tab order, and screen-reader flow through multi-step forms haven't been systematically checked.
