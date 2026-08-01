@@ -31,6 +31,21 @@ function buildDisplayNameMap(participants) {
   return map;
 }
 
+// Shared with the profile domain (a user's own portfolio is just their
+// published pieces, filtered down) so the summary shape and consent-respecting
+// byline logic only live in one place.
+export function summarizePiece(collaboration) {
+  const nameMap = buildDisplayNameMap(collaboration.participants);
+  return {
+    id: collaboration._id,
+    writingType: collaboration.writingType,
+    theme: collaboration.theme,
+    publishedAt: collaboration.publishedAt,
+    excerpt: buildExcerpt(collaboration.entries),
+    authors: collaboration.participants.map((p) => nameMap.get(p.user._id.toString())),
+  };
+}
+
 export async function listPublished({ page = 1, limit = 10, writingType, theme } = {}) {
   const query = { isPublished: true };
   if (writingType) query.writingType = writingType;
@@ -48,17 +63,7 @@ export async function listPublished({ page = 1, limit = 10, writingType, theme }
   ]);
 
   return {
-    items: collaborations.map((c) => {
-      const nameMap = buildDisplayNameMap(c.participants);
-      return {
-        id: c._id,
-        writingType: c.writingType,
-        theme: c.theme,
-        publishedAt: c.publishedAt,
-        excerpt: buildExcerpt(c.entries),
-        authors: c.participants.map((p) => nameMap.get(p.user._id.toString())),
-      };
-    }),
+    items: collaborations.map(summarizePiece),
     hasMore: skip + collaborations.length < total,
     total,
   };

@@ -216,6 +216,22 @@ test('updateProfile changes the display name', async () => {
   assert.equal(updated.displayName, 'New Name');
 });
 
+test('setProfileVisibility toggles isProfilePublic', async () => {
+  const user = await User.create({
+    displayName: 'Visibility Test',
+    email: email('profile-visibility'),
+    passwordHash: 'irrelevant',
+    authProvider: 'local',
+    isEmailVerified: true,
+  });
+
+  const madePublic = await authService.setProfileVisibility(user._id, true);
+  assert.equal(madePublic.isProfilePublic, true);
+
+  const madePrivate = await authService.setProfileVisibility(user._id, false);
+  assert.equal(madePrivate.isProfilePublic, false);
+});
+
 test('changePassword rejects an incorrect current password', async () => {
   const registerEmail = email('change-pw-wrong');
   await authService.register({

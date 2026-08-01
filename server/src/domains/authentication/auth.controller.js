@@ -144,6 +144,16 @@ export const updateProfileHandler = asyncHandler(async (req, res) => {
   res.json({ success: true, data: { user } });
 });
 
+export const setProfileVisibilityHandler = asyncHandler(async (req, res) => {
+  const { isProfilePublic } = req.body;
+  if (typeof isProfilePublic !== 'boolean') {
+    throw new ApiError(400, 'isProfilePublic must be a boolean');
+  }
+
+  const user = await authService.setProfileVisibility(req.user.id, isProfilePublic);
+  res.json({ success: true, data: { user } });
+});
+
 export const changePasswordHandler = asyncHandler(async (req, res) => {
   const { currentPassword, newPassword } = req.body;
   if (!currentPassword || !newPassword || newPassword.length < 8) {

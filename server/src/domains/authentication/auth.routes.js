@@ -11,6 +11,7 @@ import {
   forgotPasswordHandler,
   resetPasswordHandler,
   updateProfileHandler,
+  setProfileVisibilityHandler,
   changePasswordHandler,
   deleteAccountHandler,
 } from './auth.controller.js';
@@ -27,6 +28,7 @@ router.get('/me', requireAuth, meHandler);
 router.post('/forgot-password', forgotPasswordHandler);
 router.post('/reset-password/:token', resetPasswordHandler);
 router.patch('/me', requireAuth, updateProfileHandler);
+router.patch('/me/profile-visibility', requireAuth, setProfileVisibilityHandler);
 router.post('/me/change-password', requireAuth, changePasswordHandler);
 router.delete('/me', requireAuth, deleteAccountHandler);
 

@@ -75,6 +75,12 @@ export function AuthProvider({ children }) {
     return data.user;
   }, []);
 
+  const setProfileVisibility = useCallback(async (isProfilePublic) => {
+    const { data } = await authService.setProfileVisibility(isProfilePublic);
+    setCurrentUser(data.user);
+    return data.user;
+  }, []);
+
   const changePassword = useCallback(
     (currentPassword, newPassword) => authService.changePassword(currentPassword, newPassword),
     []
@@ -98,6 +104,7 @@ export function AuthProvider({ children }) {
     forgotPassword,
     resetPassword,
     updateProfile,
+    setProfileVisibility,
     changePassword,
     deleteAccount,
   };

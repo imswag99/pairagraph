@@ -25,6 +25,7 @@ const userSchema = new mongoose.Schema(
     lastActiveDate: { type: Date, default: null },
     badges: { type: [String], default: [] },
     partners: { type: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }], default: [] },
+    isProfilePublic: { type: Boolean, default: false },
   },
   { timestamps: true }
 );

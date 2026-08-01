@@ -17,9 +17,9 @@ Turn-based, two-person collaborative writing app. This document covers the backe
 | `*.controller.js` | Thin: parse `req`, call the service, shape the JSON response |
 | `*.routes.js` | Express `Router`, wires `requireAuth` + endpoints to controller functions |
 
-Domains: **authentication, collaboration, matchmaking, invite, ai, chat, leaderboard, moderation, admin, gallery**. Shared infrastructure lives outside the domains: `utils/` (ApiError, asyncHandler, tokens, mailer, logger, turnstile), `middleware/` (errorHandler), `sockets/` (Socket.IO setup), `testUtils/` (a throwaway Socket.IO server for tests that exercise services which broadcast).
+Domains: **authentication, collaboration, matchmaking, invite, ai, chat, leaderboard, moderation, admin, gallery, profile**. Shared infrastructure lives outside the domains: `utils/` (ApiError, asyncHandler, tokens, mailer, logger, turnstile), `middleware/` (errorHandler), `sockets/` (Socket.IO setup), `testUtils/` (a throwaway Socket.IO server for tests that exercise services which broadcast).
 
-**Why this shape:** the project spec called for "thin controllers, business logic inside services" and domain-based organization so new features (e.g. chat, leaderboard) slot in without touching unrelated code. Every domain has been verified end-to-end against the real database, either via the automated test suite (§13) or live curl/socket scripts during development.
+**Why this shape:** the project spec called for "thin controllers, business logic inside services" and domain-based organization so new features (e.g. chat, leaderboard) slot in without touching unrelated code. Every domain has been verified end-to-end against the real database, either via the automated test suite (§15) or live curl/socket scripts during development.
 
 **Error handling convention:** services throw `ApiError(statusCode, message)` for expected failures (validation, permission, not-found). `asyncHandler` wraps every controller so thrown/rejected errors reach the central `errorHandler` middleware, which returns `{ success: false, message }` — operational errors (`ApiError`) pass their message through; anything else becomes a generic 500 and gets logged server-side, so raw stack traces never leak to the client.
 
@@ -37,7 +37,7 @@ Domains: **authentication, collaboration, matchmaking, invite, ai, chat, leaderb
 
 **Why JWT access+refresh over sessions:** no Redis, no session store — access token (15 min) is cheap to verify on every request; refresh token (7 days) is rotated on each use and its hash (not the raw token) is stored on the `User` document, so a leaked DB doesn't hand out valid refresh tokens.
 
-**Model (`User`):** `displayName`, `email` (unique), `passwordHash` (absent for Google-only accounts), `authProvider` (`local`/`google`), `googleId` (sparse unique), `isEmailVerified`, `emailVerificationTokenHash` + expiry, `refreshTokenHash`, `passwordResetTokenHash` + expiry, `isDeleted`, `isBanned`, `blockedUsers` (§9), `role` (`user`/`admin`, default `user`).
+**Model (`User`):** `displayName`, `email` (unique), `passwordHash` (absent for Google-only accounts), `authProvider` (`local`/`google`), `googleId` (sparse unique), `isEmailVerified`, `emailVerificationTokenHash` + expiry, `refreshTokenHash`, `passwordResetTokenHash` + expiry, `isDeleted`, `isBanned`, `blockedUsers` (§9), `role` (`user`/`admin`, default `user`), `totalCompletions`/`storyCompletions`/`poemCompletions`, `currentStreak`/`longestStreak`, `badges`, `partners`, `isProfilePublic` (default `false` — §11a).
 
 **`requireAuth` does a fresh, cheap DB check on every request.** It verifies the token, then does `User.findById(decoded.sub).select('role isBanned')` — rejecting (403) immediately if the account is banned, and attaching `req.user = { id, role }` either way. Every other authenticated request downstream reads `role` off `req.user` instead of hitting the DB again itself. Role/ban status aren't in the JWT payload (just `{ sub: userId }`), so this is what makes a ban or role change take effect on the very next request, everywhere, not just on re-login.
 
@@ -47,7 +47,7 @@ Domains: **authentication, collaboration, matchmaking, invite, ai, chat, leaderb
 
 **Banning takes effect immediately, everywhere.** `login()` and `googleLogin()` both reject a banned user outright (403), and banning also clears `refreshTokenHash` so they can't silently mint a new access token via `/refresh` either. An *already-issued* access token used to still pass `requireAuth` on read-only routes until it naturally expired (≤15 min) — this was a deliberately accepted, small self-expiring gap for a while, but `requireAuth`'s DB check above closes it fully: since `requireAdmin`/`blockInactiveParticipant` no longer need their own lookup, this is a single DB round trip per request either way, not an extra one. The same fresh-ban-check was also added to the Socket.IO connection middleware (`sockets/index.js`) for consistency, since a socket connection made with an already-issued token had the identical gap on the `chat:typing` broadcast.
 
-**Endpoints:** `POST /register`, `GET /verify-email/:token`, `POST /login`, `POST /google`, `POST /refresh`, `POST /logout`, `GET /me`, `POST /forgot-password`, `POST /reset-password/:token`, `PATCH /me`, `POST /me/change-password`, `DELETE /me`.
+**Endpoints:** `POST /register`, `GET /verify-email/:token`, `POST /login`, `POST /google`, `POST /refresh`, `POST /logout`, `GET /me`, `POST /forgot-password`, `POST /reset-password/:token`, `PATCH /me`, `PATCH /me/profile-visibility`, `POST /me/change-password`, `DELETE /me`.
 
 **How verification works:** a random raw token is generated (`crypto.randomBytes`), only its SHA-256 hash is stored, the raw token is emailed as a link; verifying looks up by hash so the raw token never sits in the database. Password reset reuses the exact same hash-only pattern (`passwordResetTokenHash` + 1h expiry).
 
@@ -236,7 +236,23 @@ Badge ids are stable storage keys and never renamed once shipped (a user's earne
 
 ---
 
-## 12. Sockets
+## 12. Profile domain (public portfolios)
+
+**What:** an opt-in, off-by-default public profile — badges, streak, completion stats, and a portfolio of published pieces — viewable by anyone at `GET /profiles/:id`, logged in or not. Read-only public data plus one toggle, deliberately built as its own domain rather than folded into `authentication`, since it reads (and shapes) data the way `gallery` does, not the way auth does.
+
+**Model addition (`User`):** `isProfilePublic` (Boolean, default `false`, §2). No new stat fields were needed — `totalCompletions`/`storyCompletions`/`poemCompletions`/`currentStreak`/`longestStreak`/`badges`/`partners` already existed on `User` for the leaderboard/badges feature; this domain is a new *read surface* over data that already existed, not new tracking.
+
+**Privacy design (the actual point of this domain):**
+- `getPublicProfile` 404s unless `isProfilePublic === true`, and also 404s for a banned or deleted account even if the flag is still `true` — a suspended account shouldn't have a browsable public page.
+- **The portfolio only includes pieces this specific user personally consented to publish** (`hasConsentedToPublish: true` on their own participant subdocument, same field the gallery domain already respects, §11) — a public profile does *not* override that separate, per-piece choice. A piece they chose to appear "Anonymous collaborator" on stays off their own portfolio too, not just off the gallery's listing of it.
+- **Co-writers are never named.** The response includes `partnerCount` (`user.partners.length`) but never the partners themselves — a person didn't consent to being listed on someone else's public page just by having co-written with them. Reusing `gallery.service.js`'s `summarizePiece` (extracted from `listPublished` for exactly this sharing) for the portfolio pieces list still applies the normal per-piece, per-author consent byline, since that's already-public gallery data at that point.
+- `isProfilePublic` defaults to `false` and is only ever changed by the account owner themselves (`PATCH /auth/me/profile-visibility`, §2) — no admin or third party can turn someone's profile public.
+
+**Endpoints:** `GET /profiles/:id` — no auth middleware, same reasoning as `gallery.routes.js`.
+
+---
+
+## 13. Sockets
 
 Every domain that needs to push a real-time notification (matchmaking, invite, collaboration, chat) shares one Socket.IO server (`sockets/index.js`):
 - **Auth:** a connection-level middleware reads the `accessToken` cookie from the handshake headers (hand-parsed — no new dependency) and verifies it with the same JWT logic as HTTP's `requireAuth`.
@@ -246,7 +262,7 @@ Every domain that needs to push a real-time notification (matchmaking, invite, c
 
 ---
 
-## 13. Rate limiting
+## 14. Rate limiting
 
 `express-rate-limit`, applied in `app.js`:
 - A general baseline across all of `/api`: 300 requests / 15 min per IP.
@@ -256,21 +272,21 @@ Every domain that needs to push a real-time notification (matchmaking, invite, c
 
 ---
 
-## 14. Automated testing
+## 15. Automated testing
 
 `npm test` (in `server/`) runs `node --test "src/**/*.test.js"` — Node's built-in test runner, zero new dependencies. Tests are colocated with the service they cover (`*.service.test.js`), and hit the **real** MongoDB Atlas dev database directly (matching this project's established practice of testing against real infrastructure rather than mocks), with explicit cleanup in every test.
 
 - **Mailer mocking:** `utils/mailer.js` exports a single mutable object (`{ sendVerificationEmail, sendPasswordResetEmail, sendGoogleAccountNoticeEmail }`) rather than named exports, specifically so `node:test`'s `mock.method()` can swap individual methods in auth tests — ES module named-export bindings are frozen and can't be mocked this way, a plain object's properties can.
 - **Socket-dependent services:** `testUtils/testSocket.js` spins up a throwaway HTTP server + `initIO()` so services that call `getIO()` (matchmaking, invite, collaboration) don't throw in tests — nothing needs to actually connect, `io.to(room).emit(...)` is a safe no-op with zero listening sockets.
 - **Middleware tests:** auth middleware (§2) is Express middleware, not service functions, and this project has no supertest-style HTTP test harness — rather than add one, `auth.middleware.test.js` calls each directly with a mock `req`/`res`/`next` (a real signed JWT via `generateAccessToken` for `requireAuth`, so the DB-check-and-branch logic is exercised exactly as a real request would hit it), which needs no running server.
-- **Coverage:** auth (register/login/verify/reset/change-password/delete/banned-account-rejected-at-login, streak increment/reset across day boundaries, badge thresholds including partner-diversity and turn-count badges), collaboration (turn ownership, one-line/one-paragraph enforcement, completion approve/reject, pagination + status filtering, turn-count, leave-freezes-turns-and-completion, completion records leaderboard points and activity stats, turn-handoff sends a "your turn" email and respects its per-collaboration cooldown, publishing/unpublishing works unilaterally, publish consent only ever changes the caller's own subdocument), gallery (list only returns published pieces, consent-respecting bylines on both the piece and per-entry, writingType/theme filters, pagination, detail 404s for unpublished/nonexistent pieces including for the piece's own authors), invites (create/redeem/cancel/self-redeem-block/blocked-redeemer-rejected, theme stored and carried through redemption untouched by the redeemer), matchmaking (pairing logic, blocked-pair exclusion, differently-themed entries still match and resolve to one of the two themes, getStatus reports theme), AI keywords (`generateKeywords` returns 5 fallback words for both the default and a themed request), leaderboard (weighted-points idempotency, ranking, week/month-boundary exclusion, deleted-account exclusion, deterministic tie-breaking), moderation (report/block authorization, duplicate-report idempotency, bidirectional block lookup, admin report listing/review, gallery reports reject unpublished/nonexistent pieces, succeed for non-participants, idempotent, stored with a null reportedUser and source: 'gallery'), chat (send succeeds while in progress, send rejected once ended, history reads stay open regardless of status), admin domain (user listing with report counts, ban/unban, self-target and other-admin-target rejections, delete-anonymizes, reported-collaboration read with no participant check, unpublish works with no participant check), auth middleware (`requireAuth` rejects a missing/invalid token, lets an active user through and attaches `id`+`role`, rejects an already-banned user's still-valid token — the ban-token-gap fix, bug #24; `requireAdmin`/`blockInactiveParticipant` allow/reject based on `req.user.role`), CAPTCHA (`turnstile.verifyToken` succeeds/fails/bypasses-when-unconfigured against a mocked `fetch`, and `register` itself rejects when verification fails). 121 tests total, all passing.
+- **Coverage:** auth (register/login/verify/reset/change-password/delete/banned-account-rejected-at-login, streak increment/reset across day boundaries, badge thresholds including partner-diversity and turn-count badges), collaboration (turn ownership, one-line/one-paragraph enforcement, completion approve/reject, pagination + status filtering, turn-count, leave-freezes-turns-and-completion, completion records leaderboard points and activity stats, turn-handoff sends a "your turn" email and respects its per-collaboration cooldown, publishing/unpublishing works unilaterally, publish consent only ever changes the caller's own subdocument), gallery (list only returns published pieces, consent-respecting bylines on both the piece and per-entry, writingType/theme filters, pagination, detail 404s for unpublished/nonexistent pieces including for the piece's own authors), invites (create/redeem/cancel/self-redeem-block/blocked-redeemer-rejected, theme stored and carried through redemption untouched by the redeemer), matchmaking (pairing logic, blocked-pair exclusion, differently-themed entries still match and resolve to one of the two themes, getStatus reports theme), AI keywords (`generateKeywords` returns 5 fallback words for both the default and a themed request), leaderboard (weighted-points idempotency, ranking, week/month-boundary exclusion, deleted-account exclusion, deterministic tie-breaking), moderation (report/block authorization, duplicate-report idempotency, bidirectional block lookup, admin report listing/review, gallery reports reject unpublished/nonexistent pieces, succeed for non-participants, idempotent, stored with a null reportedUser and source: 'gallery'), chat (send succeeds while in progress, send rejected once ended, history reads stay open regardless of status), admin domain (user listing with report counts, ban/unban, self-target and other-admin-target rejections, delete-anonymizes, reported-collaboration read with no participant check, unpublish works with no participant check), auth middleware (`requireAuth` rejects a missing/invalid token, lets an active user through and attaches `id`+`role`, rejects an already-banned user's still-valid token — the ban-token-gap fix, bug #24; `requireAdmin`/`blockInactiveParticipant` allow/reject based on `req.user.role`), CAPTCHA (`turnstile.verifyToken` succeeds/fails/bypasses-when-unconfigured against a mocked `fetch`, and `register` itself rejects when verification fails), profile domain (404s for a private/nonexistent/banned-despite-public-flag profile, returns stats/badges/partner count for a public one, portfolio only lists pieces this specific user personally consented to publish — not just any published piece they're a participant on). 127 tests total, all passing.
 - **What's deliberately not covered:** raw Socket.IO event delivery over the wire (verified manually/via live scripts during development instead — a full socket-server integration harness was judged not worth the added complexity for the confidence gained), `googleLogin`'s ban check (mirrors the tested `login()` check exactly, but there's no existing harness for mocking `google-auth-library`'s token verification, and building one just for this one-line symmetric check wasn't judged worth it — verified by code inspection instead), and the frontend now has only a first slice of coverage (Vitest/RTL, see `docs/FRONTEND.md` §16) — most of the client is still verified by manual reasoning and live curl/socket scripts, no Playwright/e2e coverage exists.
 
 ---
 
-## 15. CI/CD
+## 16. CI/CD
 
-`.github/workflows/server-tests.yml` runs the backend test suite (§13) on every push and pull request, on any branch: checkout → `actions/setup-node@v4` (Node 22) → `npm ci` (server/) → `npm test`.
+`.github/workflows/server-tests.yml` runs the backend test suite (§15) on every push and pull request, on any branch: checkout → `actions/setup-node@v4` (Node 22) → `npm ci` (server/) → `npm test`.
 
 - **Secrets required:** `MONGODB_URI`, `JWT_ACCESS_SECRET`, `JWT_REFRESH_SECRET` (repo Settings → Secrets and variables → Actions). Tests hit the same real Atlas dev database as local development — consistent with this project's practice of testing against real infrastructure, though it does mean CI and local dev share state.
 - **`GEMINI_API_KEY` is deliberately left unset in CI** — with no key, `generateKeywords()` falls straight through to the local fallback pool (§6), so running the suite never spends any of the 20-requests/day Gemini quota.
@@ -278,7 +294,7 @@ Every domain that needs to push a real-time notification (matchmaking, invite, c
 
 ---
 
-## 16. Bugs found and fixed
+## 17. Bugs found and fixed
 
 | # | Bug | Root cause | Fix |
 |---|---|---|---|
@@ -307,15 +323,15 @@ Every domain that needs to push a real-time notification (matchmaking, invite, c
 | 23 | `npm ci` failed in CI again with `EUSAGE`/"package-lock.json in sync", same shape as bug #13 — missing `google-auth-library`'s transitive `gcp-metadata`/`gaxios`/`https-proxy-agent`/`agent-base`/`debug` entries, and `npm ci` passed *locally* against the exact same committed lockfile | Confirmed this is genuinely npm-version-specific, not a fluke: a local `npm ci` succeeding only proves the lockfile is tolerable to *that* npm version, not that it's complete — CI's `actions/setup-node@v4` resolves whatever Node 22.x patch is current, which can carry a different bundled npm than a local machine, and a stricter npm can reject a lockfile a looser one silently accepts | Same fix as #13, repeated: deleted `node_modules` and `package-lock.json` entirely (not just `npm ci` against the existing one) and ran a fully clean `npm install` to regenerate it from scratch, then verified `npm ci` round-tripped and the full suite passed before committing. Lesson: after this recurs a third time, stop treating "`npm ci` passes for me locally" as sufficient evidence the lockfile is CI-safe |
 | 24 | A banned user's already-issued access token kept working on read-only routes (and the `chat:typing` socket broadcast) until it naturally expired (≤15 min) — a deliberately accepted gap, until revisited on request | `requireAuth` only ever verified the JWT signature, never checked the DB, since role/ban status aren't in the token payload | Moved the fresh `User.findById(...).select('role isBanned')` check into `requireAuth` itself (the one middleware every authenticated route passes through) instead of leaving it only in `blockInactiveParticipant`; `requireAdmin` and `blockInactiveParticipant` were simplified to plain synchronous checks reading `req.user.role` (set by `requireAuth`), so this is a *consolidation* to one DB round trip per request, not an added one on the routes that already paid it. The same check was added to the Socket.IO connection middleware for parity |
 
-## 17. Operational incidents (not code bugs, but shaped a lot of this build)
+## 18. Operational incidents (not code bugs, but shaped a lot of this build)
 
 - **MongoDB Atlas connectivity outage:** login and turn-submission both 500'd with a raw TLS/`ReplicaSetNoPrimary` error from Mongoose. Root cause was Atlas's Network Access list no longer matching the current public IP (common with dynamic ISP addresses) — fixed by widening it to `0.0.0.0/0`. Not a code issue; confirmed by testing the exact same request before/after the allow-list change.
 - **Orphaned dev-server processes:** every manual restart this session killed only the process holding port 5000, never the `npm run dev` → `nodemon` parent chain that spawned it. Over many restarts this left **16 orphaned nodemon instances** silently running, all watching the same files and racing each other to rebind the port after any edit — whichever won a given restart could be serving stale code from hours earlier. Fixed by identifying and killing every `nodemon.js .../server.js` and `npm-cli.js run dev` process by exact command line before any subsequent restart.
 
-## 18. Known limitations (deliberately deferred, not overlooked)
+## 19. Known limitations (deliberately deferred, not overlooked)
 
 - **All dependency CVEs are fixed** (down from four total — removing `nodemailer` cleared its CVE as a side effect; `react-router-dom` 6.24→7.18.2 fixed the open-redirect/`deserializeErrors()` advisories; `google-auth-library` 9.15.1→10.9.1 dropped the transitive `gaxios`/`uuid` CVE entirely, taking `npm audit` here to 0 vulnerabilities; `vite` 5.3.1→7.3.6 fixed both esbuild advisories client-side, deliberately targeting v7 rather than the `npm audit`-suggested v8 — v7.3.6 already carries a patched esbuild and avoids v8's mandatory Rolldown/Oxc bundler swap and forced `vitest` v4 bump, neither of which this project needed). The `google-auth-library` bump also added a previously-missing `"engines": { "node": ">=22" }` to `server/package.json`, since this repo had no pinned backend Node version at all before (Render's default depends on when the service was originally created — unpinned, that was a silent unknown).
 - **Gemini's 20/day free-tier ceiling** (§6) — a product/cost decision, not a bug.
-- **Rate limiting and Socket.IO are single-instance only** (§11, §12) — fine for the current deployment, real gaps the moment this runs on more than one process.
+- **Rate limiting and Socket.IO are single-instance only** (§14, §13) — fine for the current deployment, real gaps the moment this runs on more than one process.
 - **Frontend test coverage is a first slice, not comprehensive** — see `docs/FRONTEND.md` §16/§18.
 - **Email deliverability:** `EMAIL_FROM` is a free Gmail address rather than a verified custom domain, since the project has no domain to verify. On SendGrid this landed in Gmail's Spam folder (Gmail treats unauthenticated `@gmail.com` senders as suspicious). On Brevo (the current provider), Brevo instead auto-substitutes its own authenticated subdomain in place of the unauthenticated one (observed: mail arrives "from" `...@<id>.brevosend.com` rather than the real Gmail address) to satisfy Gmail/Yahoo's mandatory sender-authentication rules — this is why delivery to the inbox improved, at the cost of an unfamiliar-looking sender address. No code fix without a paid custom domain to properly authenticate — worth still surfacing "check your spam folder" in the UI copy as a safety net.

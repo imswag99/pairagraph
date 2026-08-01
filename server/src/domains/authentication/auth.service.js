@@ -34,6 +34,7 @@ function toSafeUser(user) {
     currentStreak: user.currentStreak,
     longestStreak: user.longestStreak,
     badges: user.badges,
+    isProfilePublic: user.isProfilePublic,
   };
 }
 
@@ -305,6 +306,14 @@ export async function updateProfile(userId, { displayName }) {
 
   user.displayName = displayName;
   await user.save();
+  return toSafeUser(user);
+}
+
+export async function setProfileVisibility(userId, isProfilePublic) {
+  const user = await User.findByIdAndUpdate(userId, { isProfilePublic }, { new: true });
+  if (!user) {
+    throw new ApiError(404, 'User not found');
+  }
   return toSafeUser(user);
 }
 

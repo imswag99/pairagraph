@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Navigate, useNavigate } from 'react-router-dom';
+import { Link, Navigate, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext.jsx';
 import { AppShell } from '../components/layout/AppShell.jsx';
 import { AdminShell } from '../components/layout/AdminShell.jsx';
@@ -51,6 +51,55 @@ function ProfileSection({ currentUser }) {
         </button>
       </form>
       {message && <p role="status" className="text-sm text-indigo-dark">{message}</p>}
+      {error && <p role="alert" className="text-sm text-red-600">{error}</p>}
+    </section>
+  );
+}
+
+function ProfileVisibilitySection({ currentUser }) {
+  const { setProfileVisibility } = useAuth();
+  const [error, setError] = useState('');
+  const [isSaving, setIsSaving] = useState(false);
+
+  async function handleToggle() {
+    setError('');
+    setIsSaving(true);
+    try {
+      await setProfileVisibility(!currentUser.isProfilePublic);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setIsSaving(false);
+    }
+  }
+
+  return (
+    <section className="flex flex-col gap-3 rounded-xl border border-charcoal/10 bg-white/50 p-5">
+      <h2 className="font-serif text-lg text-charcoal">Public profile</h2>
+      <p className="text-sm text-charcoal/70">
+        A public profile shows your badges, streak, and any pieces you've personally consented to
+        publish — private by default, off unless you turn it on.
+      </p>
+      <div className="flex flex-wrap items-center gap-4">
+        <label className="flex items-center gap-2 text-sm text-charcoal">
+          <input
+            type="checkbox"
+            checked={currentUser.isProfilePublic}
+            onChange={handleToggle}
+            disabled={isSaving}
+            className="h-4 w-4 rounded border-charcoal/30 text-indigo focus:ring-indigo/40"
+          />
+          Make my profile public
+        </label>
+        {currentUser.isProfilePublic && (
+          <Link
+            to={`/profile/${currentUser.id}`}
+            className="text-sm text-indigo-dark underline decoration-indigo/30 underline-offset-4 transition hover:text-indigo"
+          >
+            View my public profile
+          </Link>
+        )}
+      </div>
       {error && <p role="alert" className="text-sm text-red-600">{error}</p>}
     </section>
   );
@@ -238,6 +287,7 @@ export function AccountPage() {
     <Shell currentUser={currentUser} logout={logout}>
       <h1 className="font-serif text-2xl text-charcoal">Account</h1>
       <ProfileSection currentUser={currentUser} />
+      {!isAdmin && <ProfileVisibilitySection currentUser={currentUser} />}
       <PasswordSection currentUser={currentUser} />
       {!isAdmin && <BlockedUsersSection />}
       <DangerZoneSection />

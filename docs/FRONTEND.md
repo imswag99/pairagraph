@@ -51,6 +51,7 @@ client/src/
 | `/leaderboard` | `LeaderboardPage` | Week/all-time ranked table. See §9. |
 | `/discover` | `GalleryPage` | Public gallery of published collaborations — works for both logged-in and logged-out visitors. See §15. |
 | `/discover/:id` | `GalleryItemPage` | A single published piece, read-only. See §15. |
+| `/profile/:id` | `ProfilePage` | A writer's opt-in public portfolio — works for both logged-in and logged-out visitors. See §16. |
 | `/invite/:code` | `InvitePage` | Redeems the invite if logged in; otherwise shows a landing prompt with login/register modals. |
 | `/reset-password/:token` | `ResetPasswordPage` | New-password form, reached only via the emailed link. |
 | `/account` | `AccountPage` | Change display name, change password, blocked users, delete account. See §10. |
@@ -146,7 +147,7 @@ Both use the shared `CollaborationCard` (also used standalone nowhere else now �
 
 One shared page for both writer and admin accounts, but the shell and one section depend on `currentUser.role`: it picks `AdminShell` over `AppShell` for an admin (§5) — otherwise the "Account" link in `AdminShell`'s own header dropped an admin straight into the writer chrome, defeating the point of having a separate admin shell — and skips the **Blocked users** section entirely for an admin, since an admin can never participate in a collaboration (§5) and so can never have blocked anyone; the section would only ever show "You haven't blocked anyone," pure clutter.
 
-Sections, each with its own local loading/error/success state: **Profile** (display name), **Password** (hidden behind a "this account uses Google, no password set" message if `hasPassword` is false — the on-ramp being "Forgot password" from the login screen, which lets a Google-only account set one), **Blocked users** (writer accounts only — fetched via `GET /moderation/blocks` on mount, each row a display name + "Unblock" button that calls `DELETE /moderation/blocks/:userId` and removes the row from local state directly rather than refetching), and a **Danger zone** (delete account, gated behind typing the literal word "delete" into a confirmation input before the button enables — unchanged for admin accounts, self-deletion here is unrelated to the admin panel's separate "can't delete another admin/yourself" guard, §10 of `BACKEND.md`).
+Sections, each with its own local loading/error/success state: **Profile** (display name), **Public profile** (writer accounts only — a checkbox toggling `isProfilePublic`, one PATCH per toggle via `setProfileVisibility`, with a "View my public profile" link to `/profile/:id` that only appears once it's on; see §16), **Password** (hidden behind a "this account uses Google, no password set" message if `hasPassword` is false — the on-ramp being "Forgot password" from the login screen, which lets a Google-only account set one), **Blocked users** (writer accounts only — fetched via `GET /moderation/blocks` on mount, each row a display name + "Unblock" button that calls `DELETE /moderation/blocks/:userId` and removes the row from local state directly rather than refetching), and a **Danger zone** (delete account, gated behind typing the literal word "delete" into a confirmation input before the button enables — unchanged for admin accounts, self-deletion here is unrelated to the admin panel's separate "can't delete another admin/yourself" guard, §10 of `BACKEND.md`).
 
 ---
 
@@ -214,7 +215,21 @@ Semantic landmarks (`<header>`, `<main>`, `<nav>`) were already in place. A firs
 
 ---
 
-## 16. Automated testing
+## 16. Public profiles (`ProfilePage`)
+
+**What:** an opt-in, off-by-default portfolio page at `/profile/:id` — badges, streak, completion stats, and any pieces the account owner has personally consented to publish. Same dual-mode chrome pattern as `GalleryPage`/`GalleryItemPage` (§15): `AppShell` when `currentUser` exists, a minimal standalone header otherwise, since a logged-out visitor should be able to view one.
+
+**Two components extracted for reuse, not duplicated:**
+- `components/BadgeGrid.jsx` — pulled out of `LeaderboardPage`'s `StatsPanel` (which now imports it) so the same earned/unearned badge grid renders identically on both the leaderboard and a profile, from a single `earnedBadgeIds` prop.
+- `components/collaboration/GalleryCard.jsx` — pulled out of `GalleryPage` (which now imports it) so a profile's portfolio pieces render as the exact same card as the public gallery's — same excerpt/theme/byline/date shape, same consent-respecting authors line, no separate card built for the profile.
+
+**Backend shape:** `profileService.get(id)` returns `{ displayName, totalCompletions, storyCompletions, poemCompletions, currentStreak, longestStreak, badges, partnerCount, pieces }` — no partner names, ever; `partnerCount` is the only trace of who someone's co-written with (`BACKEND.md` §12). 404s render as a plain "not available" message rather than distinguishing "doesn't exist" from "not public," so a private profile's existence isn't leaked either way.
+
+**Toggle lives on `AccountPage`** (§10) — a checkbox, off by default, with a link to the live page that only appears once it's on.
+
+---
+
+## 17. Automated testing
 
 **What:** Vitest + React Testing Library, added to close the gap `KNOWN_ISSUES.md` #9 tracked ("frontend has none [tests]") — a deliberately-scoped first slice, not exhaustive coverage of every component in the app.
 
@@ -224,7 +239,7 @@ Semantic landmarks (`<header>`, `<main>`, `<nav>`) were already in place. A firs
 
 **What's covered, and the mocking pattern used for each:**
 - `AuthContext.test.jsx` — the session-restore fallback chain (`me()` → on failure `refresh()` → `me()` again → on failure, stay logged out), plus `login`/`logout` updating `currentUser`. Mocks `services/authService.js` entirely; uses `renderHook` (built into `@testing-library/react` v16 for React 18, no separate `@testing-library/react-hooks` package needed).
-- `RegisterModal.test.jsx` — reproduces the exact CAPTCHA single-use-token regression fixed earlier (§17 bug log): a failed submission for a reason unrelated to CAPTCHA must still reset the Turnstile widget and re-disable submit. Mocks `TurnstileWidget.jsx` with a `forwardRef`/`useImperativeHandle` stub exposing a spy-able `reset()` and a button that fires `onVerify('fake-token')` — same "isolate from the real third-party integration" approach the backend suite already uses for `mailer`/`turnstile`. Also mocks `GoogleSignInButton.jsx` (renders nothing) to avoid its own `window.google` polling running during an unrelated test, and wraps renders in `MemoryRouter` since the component renders `<Link>`s to `/terms`/`/privacy`.
+- `RegisterModal.test.jsx` — reproduces the exact CAPTCHA single-use-token regression fixed earlier (§18 bug log): a failed submission for a reason unrelated to CAPTCHA must still reset the Turnstile widget and re-disable submit. Mocks `TurnstileWidget.jsx` with a `forwardRef`/`useImperativeHandle` stub exposing a spy-able `reset()` and a button that fires `onVerify('fake-token')` — same "isolate from the real third-party integration" approach the backend suite already uses for `mailer`/`turnstile`. Also mocks `GoogleSignInButton.jsx` (renders nothing) to avoid its own `window.google` polling running during an unrelated test, and wraps renders in `MemoryRouter` since the component renders `<Link>`s to `/terms`/`/privacy`.
 - `CompletionControls.test.jsx` — all three render states (self-approved / other-approved / neither) and that Agree/Decline/"Suggest wrapping this up" call `onRespond` with the right boolean. No mocking needed — pure props-in, callback-out.
 - `TurnComposer.test.jsx` — the `isBlank` gating (disabled while empty or whitespace-only) and submit/error handling. Mocks `RichTextEditor.jsx` with a plain `<textarea>` — Tiptap/ProseMirror is a well-tested third-party library in its own right, and jsdom compatibility for a real Tiptap instance wasn't worth chasing when what's actually under test is `TurnComposer`'s own logic, not the editor's.
 
@@ -232,7 +247,7 @@ Semantic landmarks (`<header>`, `<main>`, `<nav>`) were already in place. A firs
 
 ---
 
-## 17. Bugs found and fixed (frontend)
+## 18. Bugs found and fixed (frontend)
 
 | # | Bug | Root cause | Fix |
 |---|---|---|---|
@@ -256,8 +271,8 @@ Semantic landmarks (`<header>`, `<main>`, `<nav>`) were already in place. A firs
 
 ---
 
-## 18. Known limitations
+## 19. Known limitations
 
-- **Frontend test coverage is a first slice, not comprehensive** (§16: Vitest + React Testing Library, 4 files/15 tests, in CI) — `AuthContext`, `RegisterModal`'s CAPTCHA regression, `CompletionControls`, `TurnComposer`. Everything else (gallery pages, leaderboard badges, pickers, `CollaborationPage` itself, admin pages, anything socket-related) is still only verified by manual reasoning and production-build checks, no Playwright/e2e coverage exists at all.
+- **Frontend test coverage is a first slice, not comprehensive** (§17: Vitest + React Testing Library, 4 files/15 tests, in CI) — `AuthContext`, `RegisterModal`'s CAPTCHA regression, `CompletionControls`, `TurnComposer`. Everything else (gallery pages, `ProfilePage`, leaderboard badges, pickers, `CollaborationPage` itself, admin pages, anything socket-related) is still only verified by manual reasoning, a live HTTP smoke test against the real backend (`ProfilePage`'s data layer specifically), and production-build checks — no Playwright/e2e coverage exists at all.
 - **Accessibility: contrast, keyboard/focus, and form labeling are now systematically fixed** (§14) — one contrast gap remains (`text-charcoal/50`/`/40`, needs a browser-based visual pass) and none of it has been confirmed with live browser/screen-reader testing.
 - **`react-router-dom` is on 7.18.2**, fixing the open-redirect and `deserializeErrors()` CVEs. `npm audit` also flags a newer high-severity `react-router` advisory (RSC-mode CSRF, `GHSA-qwww-vcr4-c8h2`) — confirmed via the advisory text that it only affects apps using React Router's unstable RSC/server-actions mode, which this SPA never touches, and the actual fix requires a `react-router-dom` v8 that doesn't exist yet (frozen at 7.18.2 pending an upstream package merge). See `KNOWN_ISSUES.md` #7.

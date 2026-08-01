@@ -11,6 +11,8 @@ export const authService = {
   forgotPassword: (email) => api.post('/auth/forgot-password', { email }),
   resetPassword: (token, password) => api.post(`/auth/reset-password/${token}`, { password }),
   updateProfile: (displayName) => api.patch('/auth/me', { displayName }),
+  setProfileVisibility: (isProfilePublic) =>
+    api.patch('/auth/me/profile-visibility', { isProfilePublic }),
   changePassword: (currentPassword, newPassword) =>
     api.post('/auth/me/change-password', { currentPassword, newPassword }),
   deleteAccount: () => api.del('/auth/me'),

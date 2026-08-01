@@ -15,6 +15,7 @@ Pairagraph is a turn-based collaborative writing app: two people are paired up (
 - **PDF export** of completed pieces, read as continuous prose rather than turn-by-turn, with bold/italic formatting preserved.
 - **Leaderboard** — points for finishing a collaboration together, weighted by how much you wrote, with weekly, monthly, and all-time rankings, plus streaks and milestone badges to keep writers coming back.
 - **Discover** — either writer can publish a completed piece to a public gallery anyone can browse, logged in or not. Publishing never needs the other writer's agreement; being credited by name is a separate, personal choice for each of you that defaults to "Anonymous collaborator."
+- **Public profiles** — an opt-in, off-by-default portfolio page (badges, streak, completion stats, and only the pieces you've personally consented to publish) anyone can view via a link, logged in or not. Co-writers are never named on someone else's profile, only shown as a count.
 - **Report, block, and leave** — flag a writing partner for review, block them from ever being matched with you again, or leave an active collaboration outright (freezes it for both sides without deleting anything either of you wrote). A separate, gated admin panel lets the site owner review reports (with the reported collaboration's writing and chat shown inline), ban or delete abusive accounts, and unpublish a gallery piece — an admin account can't itself Quick Match, invite, or write, on the server as well as in the UI.
 - Paginated collaboration/chat history, a "your turn" count badge in the nav, and skeleton loading states throughout.
 
@@ -33,7 +34,7 @@ pairagraph/
 ├── server/     Express backend, organized by domain
 │   └── src/domains/   authentication, collaboration, matchmaking,
 │                       invite, ai, chat, leaderboard, moderation, admin,
-│                       gallery
+│                       gallery, profile
 ├── docs/       BACKEND.md, FRONTEND.md
 └── .github/workflows/  CI (runs the backend and frontend test suites)
 ```
@@ -84,7 +85,7 @@ npm run dev       # http://localhost:5173
 
 ## Testing
 
-The backend has an automated test suite (`server/npm test`, 121 tests) covering auth, the turn-based writing rules, matchmaking, invites, the leaderboard, report/block moderation, admin user management, and the public gallery — it runs in CI on every push and pull request (see `.github/workflows/server-tests.yml`). The frontend has a first slice of automated tests (`client/npm test`, 15 tests — session restore, the CAPTCHA single-use-token regression, and the core writing-loop UI), also in CI (`.github/workflows/client-tests.yml`); it's not yet comprehensive — see `docs/FRONTEND.md` for what's covered and what isn't.
+The backend has an automated test suite (`server/npm test`, 127 tests) covering auth, the turn-based writing rules, matchmaking, invites, the leaderboard, report/block moderation, admin user management, and the public gallery — it runs in CI on every push and pull request (see `.github/workflows/server-tests.yml`). The frontend has a first slice of automated tests (`client/npm test`, 15 tests — session restore, the CAPTCHA single-use-token regression, and the core writing-loop UI), also in CI (`.github/workflows/client-tests.yml`); it's not yet comprehensive — see `docs/FRONTEND.md` for what's covered and what isn't.
 
 ## License
 

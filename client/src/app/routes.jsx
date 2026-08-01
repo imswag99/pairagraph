@@ -18,6 +18,7 @@ const CollaborationsPage = namedLazy(() => import('../pages/CollaborationsPage.j
 const LeaderboardPage = namedLazy(() => import('../pages/LeaderboardPage.jsx'), 'LeaderboardPage');
 const GalleryPage = namedLazy(() => import('../pages/GalleryPage.jsx'), 'GalleryPage');
 const GalleryItemPage = namedLazy(() => import('../pages/GalleryItemPage.jsx'), 'GalleryItemPage');
+const ProfilePage = namedLazy(() => import('../pages/ProfilePage.jsx'), 'ProfilePage');
 const InvitePage = namedLazy(() => import('../pages/InvitePage.jsx'), 'InvitePage');
 const ResetPasswordPage = namedLazy(() => import('../pages/ResetPasswordPage.jsx'), 'ResetPasswordPage');
 const AccountPage = namedLazy(() => import('../pages/AccountPage.jsx'), 'AccountPage');
@@ -68,6 +69,7 @@ export function AppRoutes() {
         <Route path="/leaderboard" element={<LeaderboardPage />} />
         <Route path="/discover" element={<GalleryPage />} />
         <Route path="/discover/:id" element={<GalleryItemPage />} />
+        <Route path="/profile/:id" element={<ProfilePage />} />
         <Route path="/invite/:code" element={<InvitePage />} />
         <Route path="/reset-password/:token" element={<ResetPasswordPage />} />
         <Route path="/account" element={<AccountPage />} />
